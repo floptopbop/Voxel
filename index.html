@@ -1,421 +1,602 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ASCII Ocean – Kinematic Ecosystem</title>
-
+    <title>SDF VOXEL CARVER // V4 [MONSTER EDITION]</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            background: #020202;
-            overflow: hidden;
-            width: 100vw;
-            height: 100vh;
-            filter: brightness(1.8);
-            -webkit-overflow-scrolling: auto;
-        }
-        
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { background: #06060a; color: #00ffcc; overflow-y: auto; font-family: 'Share Tech Mono', monospace; user-select: none; }
+        #canvas-container { position: relative; width: 100%; height: 55vh; min-height: 300px; overflow: hidden; cursor: grab; filter: brightness(2); }
+        #canvas-container:active { cursor: grabbing; }
+        #canvas-container.dragover { box-shadow: inset 0 0 60px rgba(0,255,204,0.25); border: 2px dashed #00ffcc66; }
+        #ui-deck { transition: min-height 0.25s cubic-bezier(0.1,0.8,0.3,1), height 0.25s cubic-bezier(0.1,0.8,0.3,1); position: relative; width: 100%; min-height: 45vh; background: #06060a; border-top: 1px solid #00ffcc22; display: flex; flex-direction: column; }
+        #ui-deck.collapsed { min-height: 32px !important; height: 32px !important; overflow: hidden; }
+        #deck-toggle-indicator { display: inline-block; margin-right: 8px; color: #00ffccaa; transition: transform 0.25s ease; }
+        #ui-deck.collapsed #deck-toggle-indicator { transform: rotate(-90deg); }
+        #canvas-container::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 10; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px); opacity: 0.5; }
+        #vignette-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 9; background: radial-gradient(ellipse at center, transparent 55%, rgba(6,6,10,0.55) 85%, rgba(6,6,10,0.85) 100%); }
+        #drop-hint { position: absolute; inset: 0; pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; letter-spacing: 2px; color: #00ffcc88; text-transform: uppercase; opacity: 0; transition: opacity 0.3s; }
+        #canvas-container.dragover #drop-hint { opacity: 1; }
+        #toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+        .toast { background: #0a0a16; border: 1px solid #00ffcc44; color: #00ffcc; padding: 8px 14px; font-size: 0.4rem; letter-spacing: 1px; text-transform: uppercase; border-radius: 1px; animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2s forwards; box-shadow: 0 4px 10px rgba(0,255,204,0.08); }
+        @keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toastOut { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(40px); } }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .sculpting-pulse { animation: pulse 0.6s ease-in-out infinite; color: #ff0055 !important; text-shadow: 0 0 8px rgba(255,0,85,0.8); }
+        #deck-tab { height: 32px; min-height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 12px; font-size: 0.55rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; background: #08080f; border-bottom: 1px solid #00ffcc11; gap: 6px; }
+        #deck-tab span.title { flex-shrink: 0; white-space: nowrap; }
+        #deck-tab .btn-row { display: flex; gap: 4px; flex-shrink: 0; }
+        .icon-btn { background: rgba(0,255,204,0.04); border: 1px solid #00ffcc22; color: #00ffccaa; font-family: inherit; font-size: 0.45rem; letter-spacing: 1px; padding: 4px 8px; cursor: pointer; transition: all 0.2s; }
+        .icon-btn:hover { background:rgba(0,255,204,0.12); border-color:#00ffcc55; color:#00ffcc; box-shadow:0 0 12px rgba(0,255,204,0.1); }
+        .icon-btn.active-toggle { background:rgba(0,255,204,0.15); border-color:#00ffcc66; color:#fff; box-shadow:0 0 8px rgba(0,255,204,0.2); }
+        .deck-body { flex: 1; display: flex; flex-direction: row; padding: 10px 14px; gap: 0; overflow-y: auto; }
+        .col { display: flex; flex-direction: column; gap: 5px; padding-right: 12px; }
+        .col:not(:last-child) { border-right: 1px solid #00ffcc0a; margin-right: 12px; margin-bottom: 12px; }
+        .col-views { flex: 2.4; } .col-tune { flex: 1.6; } .col-tele { flex: 1; min-width: 90px; }
+        .col-lbl { font-size: 0.46rem; letter-spacing: 2px; color: #0088aa; text-transform: uppercase; border-bottom: 1px dashed #00ffcc0c; padding-bottom: 3px; margin-bottom: 1px; }
+        .view-pair { display: flex; gap: 6px; }
+        .view-slot { flex: 1; display: flex; flex-direction: column; gap: 3px; background: rgba(0,255,204,0.02); border: 1px dashed #00ffcc18; padding: 5px 6px; transition: all 0.3s; }
+        #slot-top { flex: 0 0 auto; width: 100%; border-style: dotted; border-color: #00ffcc0e; opacity: 0.7; }
+        #slot-top.loaded { opacity: 1; border-color: #00ffcc44; background: rgba(0,255,204,0.04); }
+        .view-slot.drop-highlight { border-color: #00ffcc88; background: rgba(0,255,204,0.06); box-shadow: 0 0 16px rgba(0,255,204,0.08); }
+        .view-slot-lbl { font-size: 0.46rem; color: #00ffcc66; text-transform: uppercase; }
+        input[type="file"] { font-size: 0.4rem; color: #00ffcc88; background: none; border: none; width: 100%; cursor: pointer; }
+        input[type="file"]::file-selector-button { background: rgba(0,255,204,0.06); border: 1px solid #00ffcc33; color: #00ffcc; font-family: inherit; font-size: 0.38rem; padding: 3px 8px; cursor: pointer; }
+        .sym-note { font-size: 0.42rem; color: #0088aa; padding: 3px 5px; background: rgba(0,255,204,0.02); border: 1px solid #00ffcc0a; }
+        .range-row { display:flex; flex-direction:column; gap:1px; margin-bottom:4px; }
+        .range-lbl { font-size:0.46rem; color:#00ccaa; text-transform:uppercase; display:flex; justify-content:space-between; }
+        .range-val { color:#00ffcc; }
+        input[type="range"] { width: 100%; accent-color: #00ffcc; height: 3px; background: #0c0c16; cursor: pointer; -webkit-appearance: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #00ffcc; cursor: pointer; border: 2px solid #06060a; box-shadow: 0 0 8px rgba(0,255,204,0.4); }
+        .stat-row { font-size: 0.46rem; color: #0088aa; display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #00ffcc06; }
+        .stat-v { color:#00ffcc88; }
+        #s-state { color:#fff; font-weight:bold; }
+        #pipeline-debug { display:none; }
+        @media(max-width:580px) {
+            .deck-body { flex-direction:column; }
+            .col:not(:last-child) { border-right:none; border-bottom:1px solid #00ffcc0a; padding-right:0; margin-right:0; padding-bottom:8px; }
         }
     </style>
 </head>
 <body>
-    <canvas id="simulationCanvas"></canvas>
 
-    <script>
-        // ================================================================
-        // INPUT / GESTURE LOCKDOWN
-        // ================================================================
-        document.addEventListener('gesturestart', e => e.preventDefault());
-        document.addEventListener('gesturechange', e => e.preventDefault());
-        document.addEventListener('gestureend', e => e.preventDefault());
-        document.addEventListener('touchmove', e => {
-            if (e.target === canvas || canvas.contains(e.target)) {
-                e.preventDefault();
-            }
-        }, { passive: false });
+<div id="canvas-container">
+    <div id="vignette-overlay"></div>
+    <div id="drop-hint">⬇ DROP IMAGE HERE</div>
+</div>
 
-        // ================================================================
-        // 1. ENGINE CONFIGURATION
-        // ================================================================
-        const CFG = {
-            fontSize: 6,               
-            fontFamily: "monospace",    
-            shorelineRatio: 0.28,       
-            pierXRatio: 0.8,
-            pierLengthRatio: 0.70,
-            rainIntensity: 0.005,
-            
-            randomizeShoreline: true,   
-            
-            colorBg:      "#020202",
-            colorDrySand: "#B9B9A9",
-            colorWetSand: "#787D77",    // Distinct deep wet tone for contrast
-            colorWater:   "#7D9FC3",
-            colorRipple:  "#COCOC8",    
-            colorFoam:    "#EAF4F5",
-            colorPier:    "#DF4231",
-            colorBuoy:    "#FFB800",
-            colorFlotsam: "#556B2F"
-        };
+<div id="toast-container"></div>
 
-        const canvas = document.getElementById("simulationCanvas");
-        const ctx = canvas.getContext("2d", { alpha: false });
-        
-        let W, H, charW, charH;
-        let current = [], previous = [], nextBuffer = [], foam = [], wetness = [];
-        let shoreContour = [];
-        const chars = "◯░∷▓∘oO";
+<div id="ui-deck">
+    <div id="deck-tab">
+        <span class="title"><span id="deck-toggle-indicator">▼</span>◈ SDF EDGE-CARVE ENGINE // V4 [WORKER ENABLED]</span>
+        <div class="btn-row">
+            <button class="icon-btn" id="btn-auto-rotate" title="Toggle auto-rotation (A)">⟳ ROT</button>
+            <button class="icon-btn" id="btn-reset-cam" title="Reset camera view (R)">⌂ RESET</button>
+            <button class="icon-btn" id="btn-screenshot" title="Save screenshot (Space)">⬇ PNG</button>
+        </div>
+    </div>
 
-        // Kinematic Entities Registry (Starts with the core Buoy)
-        let entities = [
-            { x: 30, y: 35, vx: 0, vy: 0, char: "◬", color: CFG.colorBuoy, dynamic: false }
-        ];
+    <div class="deck-body">
+        <div class="col col-views">
+            <div class="col-lbl">Tri-Directional Input</div>
+            <div class="view-pair">
+                <div class="view-slot" id="slot-front">
+                    <div class="view-slot-lbl">Front (N/S)</div>
+                    <input type="file" id="load-front" accept="image/*">
+                </div>
+                <div class="view-slot" id="slot-side">
+                    <div class="view-slot-lbl">Side (E/W)</div>
+                    <input type="file" id="load-side" accept="image/*">
+                </div>
+            </div>
+            <div class="view-slot" id="slot-top">
+                <div class="view-slot-lbl">Top (Y↓) <span style="float:right; font-size:0.38rem; color:#00ffcc33;">optional</span></div>
+                <input type="file" id="load-top" accept="image/*">
+            </div>
+            <div class="sym-note">Parallelized Euclidean 8-SED Distance Fields. Drag & drop supported.</div>
+        </div>
 
-        // ================================================================
-        // 2. STRUCTURAL GRID & SHORELINE DEFORMATION
-        // ================================================================
-        
-        function resize() {
-            const tester = document.createElement("span");
-            tester.style.fontFamily = CFG.fontFamily;
-            tester.style.fontSize = `${CFG.fontSize}px`;
-            tester.style.lineHeight = "1em";
-            tester.style.position = "absolute";
-            tester.style.visibility = "hidden";
-            tester.style.whiteSpace = "pre";
-            tester.textContent = "█";
-            document.body.appendChild(tester);
-            const rect = tester.getBoundingClientRect();
-            charW = rect.width;
-            charH = rect.height;
-            document.body.removeChild(tester);
+        <div class="col col-tune">
+            <div class="col-lbl">Edge Logic</div>
+            <div class="range-row">
+                <div class="range-lbl">Grid Res <span class="range-val" id="v-resolution">100</span>³</div>
+                <input type="range" id="resolution" min="16" max="164" step="4" value="100">
+            </div>
+            <div class="range-row">
+                <div class="range-lbl">Edge Bevel <span class="range-val" id="v-sculpt">4</span>px</div>
+                <input type="range" id="sculpt" min="0" max="40" step="1" value="4">
+            </div>
+            <div class="range-row">
+                <div class="range-lbl">Chroma Thresh <span class="range-val" id="v-threshold">40</span></div>
+                <input type="range" id="threshold" min="5" max="180" value="40">
+            </div>
+            <div class="range-row">
+                <div class="range-lbl">Hollow Shell <span class="range-val" id="v-hollow">0.00</span></div>
+                <input type="range" id="hollow" min="0" max="1" step="0.01" value="0">
+            </div>
+            <div class="range-row" style="margin-top:2px;">
+                <div class="range-lbl" style="cursor:pointer;background:#00ffcc11;border:1px solid #00ffcc44;padding:4px 6px;justify-content:center;" id="btn-color">
+                    MODE: &nbsp;<span class="range-val" id="v-color">THERMAL</span>
+                </div>
+            </div>
+        </div>
 
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+        <div class="col col-tele">
+            <div class="col-lbl">Telemetry</div>
+            <div class="stat-row">VOXELS <span class="stat-v" id="s-vox">—</span></div>
+            <div class="stat-row">GRID   <span class="stat-v" id="s-grid">—</span></div>
+            <div class="stat-row">VIEWS  <span class="stat-v" id="s-views">0/3</span></div>
+            <div class="stat-row">SDF    <span class="stat-v" id="s-sdf">WORKER</span></div>
+            <div class="stat-row">STATE  <span class="stat-v" id="s-state">IDLE</span></div>
+            <div class="stat-row" style="margin-top:4px;">BUILD  <span class="stat-v" id="s-build-time">—</span></div>
+        </div>
+    </div>
+</div>
 
-            W = Math.ceil(canvas.width / charW);
-            H = Math.ceil(canvas.height / charH);
+<div id="pipeline-debug">
+    <canvas id="canv-front"></canvas>
+    <canvas id="canv-side"></canvas>
+    <canvas id="canv-top"></canvas>
+</div>
 
-            current = []; previous = []; nextBuffer = []; 
-            foam = []; wetness = []; shoreContour = new Int32Array(W);
+<script type="js/worker" id="voxel-worker">
+    // --- WORKER STATE ---
+    const cache = { front: null, side: null, top: null, thresh: -1, dirty: { front: true, side: true, top: true } };
+    
+    // Euclidean distance squared formulation (removes Sqrt penalty)
+    function sqAdd(dSq, step) { return dSq + 2 * step * Math.sqrt(dSq) + step * step; }
 
-            const baseShore = Math.floor(H * CFG.shorelineRatio);
+    function extractSDF(imgData, w, h, thresh) {
+        const d = imgData.data;
+        const w4 = w * 4;
+        const corners = [0, w4-4, (h-1)*w4, h*w4-4];
+        let bgR=0, bgG=0, bgB=0;
+        corners.forEach(c => { bgR+=d[c]; bgG+=d[c+1]; bgB+=d[c+2]; });
+        bgR/=4; bgG/=4; bgB/=4;
 
-            const seed1 = Math.random() * 50;
-            const seed2 = Math.random() * 50;
-            const seed3 = Math.random() * 50;
+        const INF = 1e9;
+        const dist = new Float32Array(w * h);
+        dist.fill(INF);
+        const tSq = thresh * thresh;
 
-            for (let x = 0; x < W; x++) {
-                if (CFG.randomizeShoreline) {
-                    const layer1 = Math.sin(x * 0.12 + seed1) * 3.0;
-                    const layer2 = Math.cos(x * 0.35 + seed2) * 1.5;
-                    const layer3 = Math.sin(x * 0.03 + seed3) * 5.0; 
-                    shoreContour[x] = baseShore + Math.floor(layer1 + layer2 + layer3);
-                } else {
-                    const offset = Math.sin(x * 0.15) * 1.5 + Math.sin(x * 0.04) * 2.5;
-                    shoreContour[x] = baseShore + Math.floor(offset);
-                }
-            }
-
-            for (let y = 0; y < H; y++) {
-                current[y] = new Float32Array(W);
-                previous[y] = new Float32Array(W);
-                nextBuffer[y] = new Float32Array(W);
-                foam[y] = new Float32Array(W);
-                wetness[y] = new Float32Array(W);
-            }
-            
-            // Generate a cluster of floating ecosystem particles
-            entities = [
-                { x: Math.floor(W * 0.4), y: baseShore + 10, vx: 0, vy: 0, char: "◬", color: CFG.colorBuoy }
-            ];
-            const flotsamTypes = ["~", "•", "♦", "⁕"];
-            for (let i = 0; i < 15; i++) {
-                entities.push({
-                    x: Math.random() * (W - 4) + 2,
-                    y: Math.random() * (H - baseShore - 5) + baseShore + 2,
-                    vx: 0,
-                    vy: 0,
-                    char: flotsamTypes[Math.floor(Math.random() * flotsamTypes.length)],
-                    color: CFG.colorFlotsam
-                });
-            }
-
-            for (let e of entities) {
-                if (e.x >= W - 2) e.x = W - 3;
-                if (e.y >= H - 2) e.y = H - 3;
-            }
-
-            ctx.font = `bold ${CFG.fontSize}px ${CFG.fontFamily}`;
-            ctx.textBaseline = "top";
+        for (let i = 0; i < w * h; i++) {
+            const idx = i * 4;
+            const cSq = (d[idx]-bgR)**2 + (d[idx+1]-bgG)**2 + (d[idx+2]-bgB)**2;
+            if (cSq <= tSq) dist[i] = 0;
         }
 
-        // ================================================================
-        // 3. FLUID DYNAMICS (STABILIZED WAVE INTEGRATION)
-        // ================================================================
-
-        function ripple() {
-            const pierX = Math.floor(W * CFG.pierXRatio);
-            const pierLength = Math.floor(H * CFG.pierLengthRatio);
-
-            for (let y = 1; y < H - 1; y++) {
-                const cRow = current[y], cAbove = current[y-1], cBelow = current[y+1];
-                const pRow = previous[y], nRow = nextBuffer[y];
-                const fRow = foam[y], wRow = wetness[y];
-
-                for (let x = 1; x < W - 1; x++) {
-                    const shoreY = shoreContour[x];
-                    const isSand = y < shoreY;
-
-                    if (x === pierX && y < pierLength && y % 3 === 0) {
-                        nRow[x] = 0;
-                        if (Math.abs(cRow[x-1]) > 10.01 || Math.abs(cRow[x+1]) > 9) {
-                            fRow[x] = Math.min(8, fRow[x] + 4);
-                        }
-                        continue;
-                    }
-
-                    // Pinned to 2.1 baseline to prevent immediate NaN buffer annihilation
-                    let divisor = 2.001; 
-                    let damping = 0.985; 
-
-                    if (isSand) {
-                        const distFromShore = shoreY - y;
-                        // Scaled seamlessly to permit run-up without falling under critical feedback floor
-                        divisor = 2.0001 + (distFromShore * 0.001); 
-                        damping = Math.max(0.8, 0.75 - (distFromShore * 0.05)); 
-                    }
-
-                    let combinedNeighbors = (cAbove[x] + cBelow[x] + cRow[x-1] + cRow[x+1]) / divisor;
-                    let val = (combinedNeighbors - pRow[x]) * damping;
-                    
-                    const delta = Math.abs(val - cRow[x]);
-                    if (delta > 0.5) fRow[x] += delta * 0.3; // Convert raw structural clipping directly into foam energy
-
-                    if (isSand) {
-                        if (val > 0.12) fRow[x] += 0.25; 
-                        
-                        if (val > 0.03 || fRow[x] > 0.05) {
-                            wRow[x] = 100;
-                        }
-                        wRow[x] *= 0.94; 
-                    }
-
-                    fRow[x] *= isSand ? 0.8 : 0.92; 
-                    if (fRow[x] < 0.02) fRow[x] = 0;
-
-                    if (!isSand && (x < 6 || x > W - 6 || y > H - 6)) {
-                        const edgeX = Math.min(x, W - 1 - x), edgeY = Math.min(y, H - 1 - y);
-                        const closestEdge = Math.min(edgeX, edgeY);
-                        if (closestEdge < 1) val *= (2 + (closestEdge / 6) * .01);
-                    }
-                    
-                    nRow[x] = val;
-                }
-            }
-            
-            const temp = previous;
-            previous = current;
-            current = nextBuffer;
-            nextBuffer = temp;
-        }
-
-        // ================================================================
-        // 4. KINEMATIC PARTICLE SYSTEM
-        // ================================================================
-
-        function updateEntities() {
-            for (let e of entities) {
-                let ix = Math.floor(e.x);
-                let iy = Math.floor(e.y);
-
-                if (ix < 1) ix = 1; if (ix >= W - 1) ix = W - 2;
-                if (iy < 1) iy = 1; if (iy >= H - 1) iy = H - 2;
-
-                const slopeX = current[iy][ix+1] - current[iy][ix-1];
-                const slopeY = current[iy+1][ix] - current[iy-1][ix];
-
-                e.vx -= slopeX * 0.4;
-                e.vy -= slopeY * 0.4;
-                
-                // Persistent undertow / ocean gravity vector pulling items back out to sea
-                e.vy += 0.004; 
-
-                e.vx *= 0.92;
-                e.vy *= 0.92;
-
-                e.x += e.vx;
-                e.y += e.vy;
-
-                if (e.x < 1) { e.x = 1; e.vx *= -1; }
-                if (e.x >= W - 2) { e.x = W - 3; e.vx *= -1; }
-                if (e.y >= H - 2) { e.y = H - 3; e.vy *= -1; }
-
-                const localShore = shoreContour[Math.floor(e.x)] || Math.floor(H * CFG.shorelineRatio);
-                if (e.y <= localShore) {
-                    // Grounding effect on beach sand
-                    e.y = localShore;
-                    e.vy *= 4; 
-                    e.vx *= 4;  
-                    if (Math.abs(e.vy) > 0.05) foam[iy][ix] += 0.5; 
-                }
-                
-                const speed = Math.abs(e.vx) + Math.abs(e.vy);
-                if (speed > 0.12 && iy > localShore) {
-                    foam[iy][ix] += speed * 0.3;
-                }
+        // 8-SED Pass 1
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const i = y * w + x;
+                if (dist[i] === 0) continue;
+                let best = dist[i];
+                if (y > 0) { const v = dist[(y-1)*w+x]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
+                if (x > 0) { const v = dist[y*w+x-1]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
+                if (y > 0 && x > 0) { const v = dist[(y-1)*w+x-1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
+                if (y > 0 && x < w-1) { const v = dist[(y-1)*w+x+1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
+                dist[i] = best;
             }
         }
-
-        // ================================================================
-        // 5. RENDERER
-        // ================================================================
-
-        function render() {
-            ctx.fillStyle = CFG.colorBg;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const pierX = Math.floor(W * CFG.pierXRatio);
-            const pierLength = Math.floor(H * CFG.pierLengthRatio);
-
-            for (let y = 0; y < H; y++) {
-                const cRow = current[y];
-                const fRow = foam[y];
-                const wRow = wetness[y];
-                
-                let runString = "", runColor = "", runStartX = 0;
-
-                for (let x = 0; x < W; x++) {
-                    const shoreY = shoreContour[x];
-                    const isSand = y < shoreY;
-                    let char = "∷", color = CFG.colorWater;
-
-                    if (x === pierX && y < pierLength && y % 3 === 0) {
-                        char = "⊗"; color = CFG.colorPier;
-                    } else {
-                        const v = cRow[x];
-                        const f = fRow[x];
-                        const w = wRow[x];
-
-                        const normalized = Math.max(-1, Math.min(1, v / 2));
-                        let idx = Math.floor(Math.pow(Math.abs(normalized), 0.65) * (chars.length - 1));
-                        idx = Math.max(0, Math.min(idx, chars.length - 1));
-                        char = chars[idx];
-
-                        if (isSand) {
-                            if (f > 1.2 || v > 0.6) { color = CFG.colorFoam; char = "◌"; }
-                            else if (v > 0.08 || f > 0.3) { color = CFG.colorFoam; char = "·"; }
-                            else if (w > 0.05) { color = CFG.colorWetSand; char = "▓"; } 
-                            else { color = CFG.colorDrySand; char = "░"; }             
-                        } else {
-                            if (f > 2.0) { color = CFG.colorFoam; char = "░"; } 
-                            else if (f > 0.9) { color = CFG.colorFoam; char = "*"; }
-                            else if (f > 0.3) { color = CFG.colorRipple; char = "°"; }
-                            else if (v > 0.2 || v < -0.2) { color = CFG.colorRipple; }
-                            else { 
-                                color = CFG.colorWater; 
-                                if (idx === 2) char = "∙"; 
-                            }
-                        }
-                    }
-
-                    if (x === 0) { 
-                        runColor = color; 
-                        runString = char; 
-                        runStartX = 0; 
-                    } else if (color === runColor) { 
-                        runString += char; 
-                    } else {
-                        ctx.fillStyle = runColor;
-                        ctx.fillText(runString, runStartX * charW, y * charH);
-                        runColor = color;
-                        runString = char;
-                        runStartX = x;
-                    }
-                }
-                if (runString.length > 0) {
-                    ctx.fillStyle = runColor;
-                    ctx.fillText(runString, runStartX * charW, y * charH);
-                }
-            }
-
-            // Render floating kinematic entity objects layer
-            for (let e of entities) {
-                ctx.fillStyle = e.color;
-                ctx.fillText(e.char, Math.floor(e.x) * charW, Math.floor(e.y) * charH);
+        // 8-SED Pass 2
+        for (let y = h-1; y >= 0; y--) {
+            for (let x = w-1; x >= 0; x--) {
+                const i = y * w + x;
+                if (dist[i] === 0) continue;
+                let best = dist[i];
+                if (y < h-1) { const v = dist[(y+1)*w+x]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
+                if (x < w-1) { const v = dist[y*w+x+1]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
+                if (y < h-1 && x > 0) { const v = dist[(y+1)*w+x-1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
+                if (y < h-1 && x < w-1) { const v = dist[(y+1)*w+x+1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
+                dist[i] = best;
             }
         }
+        return { dist, pixels: d, w, h };
+    }
 
-        function animate() {
-            if (Math.random() < CFG.rainIntensity) {
-                const rx = Math.floor(Math.random() * (W - 2)) + 1;
-                const ry = Math.floor(H * 0.75) + Math.floor(Math.random() * (H * 0.15));
-                if (ry < H - 1) current[ry][rx] = 5;
-            }
-            
-            ripple();
-            updateEntities();
-            render();
-            
-            requestAnimationFrame(animate);
-        }
-
-        // ================================================================
-        // 6. INTERACTION LOGIC
-        // ================================================================
-
-        function interact(cx, cy) {
-            const radius = 2;
-            for (let y = -radius; y <= radius; y++) {
-                const py = cy + y;
-                if (py <= 0 || py >= H - 1) continue;
-                for (let x = -radius; x <= radius; x++) {
-                    const px = cx + x;
-                    if (px > 0 && px < W - 1) {
-                        current[py][px] = 2; 
-                    }
-                }
-            }
-
-            for (let e of entities) {
-                const dx = e.x - cx;
-                const dy = e.y - cy;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < 6) {
-                    e.vx += (dx / dist) * 12.5;
-                    e.vy += (dy / dist) * 12.5;
-                }
-            }
-        }
-
-        function getGridCoords(e) {
-            return {
-                x: Math.floor((e.clientX || e.touches[0].clientX) / window.innerWidth * W),
-                y: Math.floor((e.clientY || e.touches[0].clientY) / window.innerHeight * H)
+    // Helper for Thermal Color mapping
+    function hslToRgb(h, s, l) {
+        let r, g, b;
+        if(s === 0) r = g = b = l; 
+        else {
+            const hue2rgb = (p, q, t) => {
+                if(t < 0) t += 1;
+                if(t > 1) t -= 1;
+                if(t < 1/6) return p + (q - p) * 6 * t;
+                if(t < 1/2) return q;
+                if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
             };
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h + 1/3);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1/3);
+        }
+        return [r, g, b];
+    }
+
+    self.onmessage = function(e) {
+        const msg = e.data;
+        if (msg.type === 'update_image') {
+            cache[msg.view] = { imgData: msg.imgData, w: msg.imgData.width, h: msg.imgData.height };
+            cache.dirty[msg.view] = true;
+            return;
         }
 
-        canvas.addEventListener('pointerdown', e => {
-            const { x, y } = getGridCoords(e);
-            interact(x, y);
-        });
+        if (msg.type === 'build') {
+            const t0 = performance.now();
+            const { cfg, jobId } = msg;
 
-        canvas.addEventListener('pointermove', e => {
-            if (e.buttons) {
-                const { x, y } = getGridCoords(e);
-                interact(x, y);
+            if (cfg.threshold !== cache.thresh) {
+                cache.dirty.front = cache.dirty.side = cache.dirty.top = true;
+                cache.thresh = cfg.threshold;
             }
-        });
 
-        window.addEventListener('resize', resize);
-        resize();
-        animate();
-    </script>
+            // Extract SDFs if dirty and data exists
+            if (cache.dirty.front && cache.front) { cache.front.sdf = extractSDF(cache.front.imgData, cache.front.w, cache.front.h, cfg.threshold); cache.dirty.front = false; }
+            if (cache.dirty.side && cache.side) { cache.side.sdf = extractSDF(cache.side.imgData, cache.side.w, cache.side.h, cfg.threshold); cache.dirty.side = false; }
+            if (cache.dirty.top && cache.top) { cache.top.sdf = extractSDF(cache.top.imgData, cache.top.w, cache.top.h, cfg.threshold); cache.dirty.top = false; }
+
+            if (!cache.front || !cache.side) {
+                self.postMessage({ type: 'done', jobId, activeCount: 0, time: performance.now() - t0 });
+                return;
+            }
+
+            const sdfF = cache.front.sdf;
+            const sdfS = cache.side.sdf;
+            const sdfT = cache.top ? cache.top.sdf : null;
+            const useTop = !!sdfT;
+
+            const res = cfg.resolution;
+            const maxInstances = res * res * res;
+            
+            // ZERO-COPY ALLOCATIONS: Pre-allocating typed arrays to transfer directly to WebGL
+            const matrices = new Float32Array(maxInstances * 16);
+            const colors = new Float32Array(maxInstances * 3);
+            
+            const step = 1.8 / res;
+            const sizeFactor = step * (1 - cfg.blockGap);
+            let activeCount = 0;
+            const offset = -0.9 + step / 2;
+            const span = 1.8;
+            const sculptRSq = cfg.sculpt * cfg.sculpt;
+            const shellThickness = cfg.hollow * 15.0;
+
+            for (let y = 0; y < res; y++) {
+                const imgY = Math.floor((1 - y/res) * (sdfF.h - 1));
+                const yPos = (y/res) * span + offset;
+
+                for (let x = 0; x < res; x++) {
+                    const imgX_F = Math.floor((x/res) * (sdfF.w - 1));
+                    const dFSq = sdfF.dist[imgY * sdfF.w + imgX_F];
+                    if (dFSq === 0) continue; 
+                    const xPos = (x/res) * span + offset;
+
+                    for (let z = 0; z < res; z++) {
+                        const imgX_S = Math.floor((z/res) * (sdfS.w - 1));
+                        const dSSq = sdfS.dist[imgY * sdfS.w + imgX_S];
+                        if (dSSq === 0) continue; 
+
+                        if (useTop) {
+                            const tImgX = Math.floor((x/res) * (sdfT.w - 1));
+                            const tImgY = Math.floor((z/res) * (sdfT.h - 1));
+                            if (sdfT.dist[tImgY * sdfT.w + tImgX] === 0) continue;
+                        }
+
+                        if (cfg.sculpt > 0 && dFSq <= sculptRSq && dSSq <= sculptRSq) {
+                            const cornerX = cfg.sculpt - Math.sqrt(dFSq);
+                            const cornerZ = cfg.sculpt - Math.sqrt(dSSq);
+                            if ((cornerX*cornerX + cornerZ*cornerZ) > sculptRSq) continue;
+                        }
+
+                        const minDistSq = Math.min(dFSq, dSSq);
+                        const minDist = Math.sqrt(minDistSq);
+
+                        if (cfg.hollow > 0 && minDist > shellThickness) continue;
+
+                        const edgeScale = Math.min(1.0, minDist / 3);
+                        const sF = sizeFactor * (0.6 + 0.4 * edgeScale);
+                        const zPos = (z/res) * span + offset;
+
+                        // MATHEMATICAL BYPASS: Construct column-major affine matrix directly
+                        // Eliminates 1,000,000+ THREE.Matrix4 object instantiations per UI frame
+                        const mIdx = activeCount * 16;
+                        matrices[mIdx+0] = sF; matrices[mIdx+4] = 0;  matrices[mIdx+8]  = 0;  matrices[mIdx+12] = xPos;
+                        matrices[mIdx+1] = 0;  matrices[mIdx+5] = sF; matrices[mIdx+9]  = 0;  matrices[mIdx+13] = yPos;
+                        matrices[mIdx+2] = 0;  matrices[mIdx+6] = 0;  matrices[mIdx+10] = sF; matrices[mIdx+14] = zPos;
+                        matrices[mIdx+3] = 0;  matrices[mIdx+7] = 0;  matrices[mIdx+11] = 0;  matrices[mIdx+15] = 1;
+
+                        const cIdx = activeCount * 3;
+                        if (cfg.colorMode === 'source') {
+                            const pF = (imgY * sdfF.w + imgX_F) * 4;
+                            const pS = (imgY * sdfS.w + imgX_S) * 4;
+                            colors[cIdx]   = (sdfF.pixels[pF] + sdfS.pixels[pS]) * 0.5 / 255;
+                            colors[cIdx+1] = (sdfF.pixels[pF+1] + sdfS.pixels[pS+1]) * 0.5 / 255;
+                            colors[cIdx+2] = (sdfF.pixels[pF+2] + sdfS.pixels[pS+2]) * 0.5 / 255;
+                        } else {
+                            const depthMap = Math.min(1.0, Math.sqrt(Math.max(dFSq, dSSq)) / 15.0);
+                            const rgb = hslToRgb(0.5 - depthMap*0.1, 1.0, 0.2 + depthMap*0.6);
+                            colors[cIdx] = rgb[0]; colors[cIdx+1] = rgb[1]; colors[cIdx+2] = rgb[2];
+                        }
+                        activeCount++;
+                    }
+                }
+            }
+
+            // Slice out only the memory we actually used to prevent transferring massive empty buffers
+            const finalMatrices = matrices.slice(0, activeCount * 16);
+            const finalColors = colors.slice(0, activeCount * 3);
+
+            // TRANSFERABLE OBJECTS: Zero-copy send back to main thread
+            self.postMessage(
+                { type: 'done', jobId, activeCount, time: performance.now() - t0, matrices: finalMatrices, colors: finalColors }, 
+                [finalMatrices.buffer, finalColors.buffer]
+            );
+        }
+    };
+</script>
+
+<script>
+// ── SYSTEM CONFIGURATION ───────────────────────────────────────────────────
+let CFG = { resolution: 100, threshold: 40, blockGap: 0.0, sculpt: 4, hollow: 0.0, colorMode: 'thermal' };
+const INTERNAL_IMAGE_SANDBOX = 128;
+let scene, camera, renderer, controls, instancedMesh, particleSystem;
+const ctxs = {};
+const loaded = { front: false, side: false, top: false };
+let autoRotateEnabled = true;
+
+// Concurrency State
+let currentJobId = 0;
+let pendingBuild = false;
+
+// Initialize Worker from inline Blob
+const workerBlob = new Blob([document.getElementById('voxel-worker').textContent], { type: 'application/javascript' });
+const worker = new Worker(URL.createObjectURL(workerBlob));
+
+function showToast(msg, duration=8000) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast'; toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, duration+8000);
+}
+
+// Custom debounce that triggers build loop securely
+function debounceInput(fn, delay) {
+    let timer; return function(...args) { clearTimeout(timer); timer = setTimeout(()=>fn.apply(this,args), delay); };
+}
+
+// ── ENGINE INITIALIZATION ──────────────────────────────────────────────────
+function init() {
+    const container = document.getElementById('canvas-container');
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x06060a);
+    scene.fog = new THREE.Fog(0x06060a, 3.5, 12);
+
+    camera = new THREE.PerspectiveCamera(40, container.clientWidth/container.clientHeight, 0.1, 100);
+    camera.position.set(2.8, 2.2, 2.8);
+
+    renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance', preserveDrawingBuffer:true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.05;
+
+    scene.add(new THREE.AmbientLight(0x445566, 1.2));
+    const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(5,8,5); scene.add(dl);
+    const dl2 = new THREE.DirectionalLight(0xff00cc, 0.3); dl2.position.set(-5,2,-5); scene.add(dl2);
+
+    const grid = new THREE.GridHelper(6, 12, 0x004433, 0x001111);
+    grid.position.y = -1.0; scene.add(grid);
+
+    createParticles();
+
+    ctxs.front = document.getElementById('canv-front').getContext('2d', { willReadFrequently:true });
+    ctxs.side  = document.getElementById('canv-side').getContext('2d', { willReadFrequently:true });
+    ctxs.top   = document.getElementById('canv-top').getContext('2d', { willReadFrequently:true });
+
+    generateFallbacks();
+    
+    // Inject fallbacks into worker context
+    updateWorkerImage('front'); updateWorkerImage('side'); updateWorkerImage('top');
+    requestBuild();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    setupDragAndDrop();
+    window.addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT') handleKeyboard(e.key.toLowerCase()); });
+    updateAutoRotateState();
+}
+
+function createParticles() {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(300 * 3);
+    for(let i=0; i<300; i++) { pos[i*3]=(Math.random()-0.5)*8; pos[i*3+1]=(Math.random()-0.5)*8; pos[i*3+2]=(Math.random()-0.5)*8; }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    particleSystem = new THREE.Points(geo, new THREE.PointsMaterial({ color:0x00ffcc, size:0.012, transparent:true, opacity:0.5, blending:THREE.AdditiveBlending }));
+    scene.add(particleSystem);
+}
+
+// ── ASYNCHRONOUS WORKER PIPELINE ──────────────────────────────────────────
+function updateWorkerImage(view) {
+    const w = ctxs[view].canvas.width; const h = ctxs[view].canvas.height;
+    worker.postMessage({ type: 'update_image', view, imgData: ctxs[view].getImageData(0, 0, w, h) });
+}
+
+function requestBuild() {
+    currentJobId++;
+    pendingBuild = true;
+    const stateEl = document.getElementById('s-state');
+    stateEl.innerText = 'SCULPTING…';
+    stateEl.classList.add('sculpting-pulse');
+    worker.postMessage({ type: 'build', cfg: CFG, jobId: currentJobId });
+}
+
+worker.onmessage = function(e) {
+    const msg = e.data;
+    if (msg.type === 'done') {
+        // Discard stale geometries if user dragged sliders rapidly
+        if (msg.jobId !== currentJobId) return;
+        
+        pendingBuild = false;
+        document.getElementById('s-state').classList.remove('sculpting-pulse');
+
+        if (instancedMesh) {
+            scene.remove(instancedMesh);
+            instancedMesh.geometry.dispose();
+            instancedMesh.material.dispose();
+            instancedMesh = null;
+        }
+
+        if (msg.activeCount > 0) {
+            const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+            const boxMat = new THREE.MeshStandardMaterial({ roughness:0.6, metalness:0.2, flatShading:true });
+            instancedMesh = new THREE.InstancedMesh(boxGeo, boxMat, msg.activeCount);
+            
+            // Rehydrate flat Float32Arrays directly into Three.js Instanced Attributes (Instant setup)
+            instancedMesh.instanceMatrix = new THREE.InstancedBufferAttribute(msg.matrices, 16);
+            instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(msg.colors, 3);
+            scene.add(instancedMesh);
+            
+            document.getElementById('s-state').innerText = 'READY';
+        } else {
+            document.getElementById('s-state').innerText = 'NO SIGNAL';
+        }
+
+        const viewsLoadedStr = `${loaded.front + loaded.side + loaded.top}/3${loaded.top?' +T':''}`;
+        document.getElementById('s-vox').innerText = msg.activeCount.toLocaleString();
+        document.getElementById('s-grid').innerText = `${CFG.resolution}³`;
+        document.getElementById('s-views').innerText = viewsLoadedStr;
+        document.getElementById('s-build-time').innerText = `${msg.time.toFixed(0)}ms`;
+    }
+};
+
+const debouncedBuild = debounceInput(requestBuild, 60);
+
+// ── UI BINDINGS & DRAG/DROP ────────────────────────────────────────────────
+function generateFallbacks() {
+    const s = INTERNAL_IMAGE_SANDBOX;
+    [ctxs.front, ctxs.side, ctxs.top].forEach(ctx => {
+        ctx.canvas.width = s; ctx.canvas.height = s;
+        ctx.fillStyle = '#06060a'; ctx.fillRect(0,0,s,s);
+        ctx.fillStyle = '#00ffcc';
+        ctx.fillRect(s*0.3, s*0.2, s*0.4, s*0.6);
+        ctx.fillRect(s*0.1, s*0.4, s*0.8, s*0.2);
+    });
+}
+
+function processImageUpload(file, viewKey) {
+    if (!file.type.match(/image\//)) { showToast('⚠ INVALID FILE'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const img = new Image();
+        img.onload = () => {
+            const ctx = ctxs[viewKey];
+            ctx.drawImage(img, 0, 0, INTERNAL_IMAGE_SANDBOX, INTERNAL_IMAGE_SANDBOX);
+            if (!loaded[viewKey]) { loaded[viewKey] = true; }
+            if (viewKey === 'top') document.getElementById('slot-top').classList.add('loaded');
+            updateWorkerImage(viewKey);
+            requestBuild();
+            showToast(`✓ ${viewKey.toUpperCase()} LOADED`);
+        };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function setupDragAndDrop() {
+    const cc = document.getElementById('canvas-container');
+    cc.addEventListener('dragover', e => { e.preventDefault(); cc.classList.add('dragover'); });
+    cc.addEventListener('dragleave', e => { e.preventDefault(); cc.classList.remove('dragover'); });
+    cc.addEventListener('drop', e => {
+        e.preventDefault(); cc.classList.remove('dragover');
+        if (e.dataTransfer.files[0]) processImageUpload(e.dataTransfer.files[0], 'front');
+        if (e.dataTransfer.files[1]) processImageUpload(e.dataTransfer.files[1], 'side');
+        if (e.dataTransfer.files[2]) processImageUpload(e.dataTransfer.files[2], 'top');
+    });
+    ['front','side','top'].forEach(k => {
+        const el = document.getElementById(`load-${k}`);
+        el.addEventListener('change', e => { if (e.target.files[0]) processImageUpload(e.target.files[0], k); });
+    });
+}
+
+// Slider Bindings
+['resolution', 'sculpt', 'threshold'].forEach(id => {
+    document.getElementById(id).addEventListener('input', e => {
+        CFG[id] = parseInt(e.target.value);
+        document.getElementById(`v-${id}`).innerText = e.target.value;
+        debouncedBuild();
+    });
+});
+document.getElementById('hollow').addEventListener('input', e => {
+    CFG.hollow = parseFloat(e.target.value);
+    document.getElementById('v-hollow').innerText = CFG.hollow.toFixed(2);
+    debouncedBuild();
+});
+document.getElementById('btn-color').addEventListener('click', () => {
+    CFG.colorMode = CFG.colorMode==='thermal' ? 'source' : 'thermal';
+    document.getElementById('v-color').innerText = CFG.colorMode.toUpperCase();
+    requestBuild();
+});
+
+// Camera Controls
+const CAM_POS = { d: [2.8,2.2,2.8], f: [0,0,4.5], s: [4.5,0,0], t: [0,4.5,0.01] };
+function moveCam(tgt) { 
+    camera.position.set(...tgt); controls.target.set(0,0,0); controls.update(); 
+}
+function handleKeyboard(k) {
+    if(k==='r'){ moveCam(CAM_POS.d); showToast('⌂ RESET'); }
+    if(k==='f'){ moveCam(CAM_POS.f); showToast('◈ FRONT'); }
+    if(k==='s'){ moveCam(CAM_POS.s); showToast('◈ SIDE'); }
+    if(k==='t'){ moveCam(CAM_POS.t); showToast('◈ TOP'); }
+    if(k==='a'){ document.getElementById('btn-auto-rotate').click(); }
+    if(k===' '){ document.getElementById('btn-screenshot').click(); }
+}
+
+document.getElementById('btn-reset-cam').addEventListener('click', ()=>moveCam(CAM_POS.d));
+document.getElementById('btn-screenshot').addEventListener('click', () => {
+    renderer.render(scene, camera);
+    const link = document.createElement('a');
+    link.download = `sdf-v4-${Date.now()}.png`; link.href = renderer.domElement.toDataURL('image/png'); link.click();
+    showToast('⬇ SAVED');
+});
+
+function updateAutoRotateState() {
+    const b = document.getElementById('btn-auto-rotate');
+    if(autoRotateEnabled){ b.classList.add('active-toggle'); b.textContent='⟳ ROT:ON'; }
+    else{ b.classList.remove('active-toggle'); b.textContent='⟳ ROT:OFF'; }
+}
+document.getElementById('btn-auto-rotate').addEventListener('click', () => { autoRotateEnabled=!autoRotateEnabled; updateAutoRotateState(); });
+
+document.getElementById('deck-tab').addEventListener('click', e => {
+    if (e.target.closest('.btn-row') || e.target.closest('.icon-btn')) return;
+    const deck = document.getElementById('ui-deck');
+    deck.classList.toggle('collapsed');
+    document.getElementById('canvas-container').style.height = deck.classList.contains('collapsed') ? 'calc(100vh - 32px)' : '55vh';
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 260);
+});
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    if (instancedMesh && autoRotateEnabled) instancedMesh.rotation.y += 0.001;
+    if (particleSystem) { particleSystem.rotation.y += 0.0005; particleSystem.rotation.x += 0.0005; }
+    renderer.render(scene, camera);
+}
+
+init(); animate();
+console.log('%c◈ SDF VOXEL CARVER V4 %cWORKER MULTI-THREADING INITIALIZED', 'color:#00ffcc;font-weight:bold;', 'color:#ff0055;');
+</script>
 </body>
 </html>
