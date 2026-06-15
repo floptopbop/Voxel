@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ASCII Ocean – Kinematic Ecosystem</title>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #020202;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            filter: brightness(1.8);
+            -webkit-overflow-scrolling: auto;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="simulationCanvas"></canvas>
+
+    <script>
+        // ================================================================
+        // INPUT / GESTURE LOCKDOWN
+        // ================================================================
+        document.addEventListener('gesturestart', e => e.preventDefault());
+        document.addEventListener('gesturechange', e => e.preventDefault());
+        document.addEventListener('gestureend', e => e.preventDefault());
+        document.addEventListener('touchmove', e => {
+            if (e.target === canvas || canvas.contains(e.target)) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // ================================================================
+        // 1. ENGINE CONFIGURATION
+        // ================================================================
+        const CFG = {
+            fontSize: 6,               
+            fontFamily: "monospace",    
+            shorelineRatio: 0.28,       
+            pierXRatio: 0.8,
+            pierLengthRatio: 0.70,
+            rainIntensity: 0.005,
+            
+            randomizeShoreline: true,   
+            
+            colorBg:      "#020202",
+            colorDrySand: "#B9B9A9",
+            colorWetSand: "#787D77",    // Distinct deep wet tone for contrast
+            colorWater:   "#7D9FC3",
+            colorRipple:  "#COCOC8",    
+            colorFoam:    "#EAF4F5",
+            colorPier:    "#DF4231",
+            colorBuoy:    "#FFB800",
+            colorFlotsam: "#556B2F"
+        };
+
+        const canvas = document.getElementById("simulationCanvas");
+        const ctx = canvas.getContext("2d", { alpha: false });
+        
+        let W, H, charW, charH;
+        let current = [], previous = [], nextBuffer = [], foam = [], wetness = [];
+        let shoreContour = [];
+        const chars = "◯░∷▓∘oO";
+
+        // Kinematic Entities Registry (Starts with the core Buoy)
+        let entities = [
+            { x: 30, y: 35, vx: 0, vy: 0, char: "◬", color: CFG.colorBuoy, dynamic: false }
+        ];
+
+        // ================================================================
+        // 2. STRUCTURAL GRID & SHORELINE DEFORMATION
+        // ================================================================
+        
+        function resize() {
+            const tester = document.createElement("span");
+            tester.style.fontFamily = CFG.fontFamily;
+            tester.style.fontSize = `${CFG.fontSize}px`;
+            tester.style.lineHeight = "1em";
+            tester.style.position = "absolute";
+            tester.style.visibility = "hidden";
+            tester.style.whiteSpace = "pre";
+            tester.textContent = "█";
+            document.body.appendChild(tester);
+            const rect = tester.getBoundingClientRect();
+            charW = rect.width;
+            charH = rect.height;
+            document.body.removeChild(tester);
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            W = Math.ceil(canvas.width / charW);
+            H = Math.ceil(canvas.height / charH);
+
+            current = []; previous = []; nextBuffer = []; 
+            foam = []; wetness = []; shoreContour = new Int32Array(W);
+
+            const baseShore = Math.floor(H * CFG.shorelineRatio);
+
+            const seed1 = Math.random() * 50;
+            const seed2 = Math.random() * 50;
+            const seed3 = Math.random() * 50;
+
+            for (let x = 0; x < W; x++) {
+                if (CFG.randomizeShoreline) {
+                    const layer1 = Math.sin(x * 0.12 + seed1) * 3.0;
+                    const layer2 = Math.cos(x * 0.35 + seed2) * 1.5;
+                    const layer3 = Math.sin(x * 0.03 + seed3) * 5.0; 
+                    shoreContour[x] = baseShore + Math.floor(layer1 + layer2 + layer3);
+                } else {
+                    const offset = Math.sin(x * 0.15) * 1.5 + Math.sin(x * 0.04) * 2.5;
+                    shoreContour[x] = baseShore + Math.floor(offset);
+                }
+            }
+
+            for (let y = 0; y < H; y++) {
+                current[y] = new Float32Array(W);
+                previous[y] = new Float32Array(W);
+                nextBuffer[y] = new Float32Array(W);
+                foam[y] = new Float32Array(W);
+                wetness[y] = new Float32Array(W);
+            }
+            
+            // Generate a cluster of floating ecosystem particles
+            entities = [
+                { x: Math.floor(W * 0.4), y: baseShore + 10, vx: 0, vy: 0, char: "◬", color: CFG.colorBuoy }
+            ];
+            const flotsamTypes = ["~", "•", "♦", "⁕"];
+            for (let i = 0; i < 15; i++) {
+                entities.push({
+                    x: Math.random() * (W - 4) + 2,
+                    y: Math.random() * (H - baseShore - 5) + baseShore + 2,
+                    vx: 0,
+                    vy: 0,
+                    char: flotsamTypes[Math.floor(Math.random() * flotsamTypes.length)],
+                    color: CFG.colorFlotsam
+                });
+            }
+
+            for (let e of entities) {
+                if (e.x >= W - 2) e.x = W - 3;
+                if (e.y >= H - 2) e.y = H - 3;
+            }
+
+            ctx.font = `bold ${CFG.fontSize}px ${CFG.fontFamily}`;
+            ctx.textBaseline = "top";
+        }
+
+        // ================================================================
+        // 3. FLUID DYNAMICS (STABILIZED WAVE INTEGRATION)
+        // ================================================================
+
+        function ripple() {
+            const pierX = Math.floor(W * CFG.pierXRatio);
+            const pierLength = Math.floor(H * CFG.pierLengthRatio);
+
+            for (let y = 1; y < H - 1; y++) {
+                const cRow = current[y], cAbove = current[y-1], cBelow = current[y+1];
+                const pRow = previous[y], nRow = nextBuffer[y];
+                const fRow = foam[y], wRow = wetness[y];
+
+                for (let x = 1; x < W - 1; x++) {
+                    const shoreY = shoreContour[x];
+                    const isSand = y < shoreY;
+
+                    if (x === pierX && y < pierLength && y % 3 === 0) {
+                        nRow[x] = 0;
+                        if (Math.abs(cRow[x-1]) > 10.01 || Math.abs(cRow[x+1]) > 9) {
+                            fRow[x] = Math.min(8, fRow[x] + 4);
+                        }
+                        continue;
+                    }
+
+                    // Pinned to 2.1 baseline to prevent immediate NaN buffer annihilation
+                    let divisor = 2.001; 
+                    let damping = 0.985; 
+
+                    if (isSand) {
+                        const distFromShore = shoreY - y;
+                        // Scaled seamlessly to permit run-up without falling under critical feedback floor
+                        divisor = 2.0001 + (distFromShore * 0.001); 
+                        damping = Math.max(0.8, 0.75 - (distFromShore * 0.05)); 
+                    }
+
+                    let combinedNeighbors = (cAbove[x] + cBelow[x] + cRow[x-1] + cRow[x+1]) / divisor;
+                    let val = (combinedNeighbors - pRow[x]) * damping;
+                    
+                    const delta = Math.abs(val - cRow[x]);
+                    if (delta > 0.5) fRow[x] += delta * 0.3; // Convert raw structural clipping directly into foam energy
+
+                    if (isSand) {
+                        if (val > 0.12) fRow[x] += 0.25; 
+                        
+                        if (val > 0.03 || fRow[x] > 0.05) {
+                            wRow[x] = 100;
+                        }
+                        wRow[x] *= 0.94; 
+                    }
+
+                    fRow[x] *= isSand ? 0.8 : 0.92; 
+                    if (fRow[x] < 0.02) fRow[x] = 0;
+
+                    if (!isSand && (x < 6 || x > W - 6 || y > H - 6)) {
+                        const edgeX = Math.min(x, W - 1 - x), edgeY = Math.min(y, H - 1 - y);
+                        const closestEdge = Math.min(edgeX, edgeY);
+                        if (closestEdge < 1) val *= (2 + (closestEdge / 6) * .01);
+                    }
+                    
+                    nRow[x] = val;
+                }
+            }
+            
+            const temp = previous;
+            previous = current;
+            current = nextBuffer;
+            nextBuffer = temp;
+        }
+
+        // ================================================================
+        // 4. KINEMATIC PARTICLE SYSTEM
+        // ================================================================
+
+        function updateEntities() {
+            for (let e of entities) {
+                let ix = Math.floor(e.x);
+                let iy = Math.floor(e.y);
+
+                if (ix < 1) ix = 1; if (ix >= W - 1) ix = W - 2;
+                if (iy < 1) iy = 1; if (iy >= H - 1) iy = H - 2;
+
+                const slopeX = current[iy][ix+1] - current[iy][ix-1];
+                const slopeY = current[iy+1][ix] - current[iy-1][ix];
+
+                e.vx -= slopeX * 0.4;
+                e.vy -= slopeY * 0.4;
+                
+                // Persistent undertow / ocean gravity vector pulling items back out to sea
+                e.vy += 0.004; 
+
+                e.vx *= 0.92;
+                e.vy *= 0.92;
+
+                e.x += e.vx;
+                e.y += e.vy;
+
+                if (e.x < 1) { e.x = 1; e.vx *= -1; }
+                if (e.x >= W - 2) { e.x = W - 3; e.vx *= -1; }
+                if (e.y >= H - 2) { e.y = H - 3; e.vy *= -1; }
+
+                const localShore = shoreContour[Math.floor(e.x)] || Math.floor(H * CFG.shorelineRatio);
+                if (e.y <= localShore) {
+                    // Grounding effect on beach sand
+                    e.y = localShore;
+                    e.vy *= 4; 
+                    e.vx *= 4;  
+                    if (Math.abs(e.vy) > 0.05) foam[iy][ix] += 0.5; 
+                }
+                
+                const speed = Math.abs(e.vx) + Math.abs(e.vy);
+                if (speed > 0.12 && iy > localShore) {
+                    foam[iy][ix] += speed * 0.3;
+                }
+            }
+        }
+
+        // ================================================================
+        // 5. RENDERER
+        // ================================================================
+
+        function render() {
+            ctx.fillStyle = CFG.colorBg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const pierX = Math.floor(W * CFG.pierXRatio);
+            const pierLength = Math.floor(H * CFG.pierLengthRatio);
+
+            for (let y = 0; y < H; y++) {
+                const cRow = current[y];
+                const fRow = foam[y];
+                const wRow = wetness[y];
+                
+                let runString = "", runColor = "", runStartX = 0;
+
+                for (let x = 0; x < W; x++) {
+                    const shoreY = shoreContour[x];
+                    const isSand = y < shoreY;
+                    let char = "∷", color = CFG.colorWater;
+
+                    if (x === pierX && y < pierLength && y % 3 === 0) {
+                        char = "⊗"; color = CFG.colorPier;
+                    } else {
+                        const v = cRow[x];
+                        const f = fRow[x];
+                        const w = wRow[x];
+
+                        const normalized = Math.max(-1, Math.min(1, v / 2));
+                        let idx = Math.floor(Math.pow(Math.abs(normalized), 0.65) * (chars.length - 1));
+                        idx = Math.max(0, Math.min(idx, chars.length - 1));
+                        char = chars[idx];
+
+                        if (isSand) {
+                            if (f > 1.2 || v > 0.6) { color = CFG.colorFoam; char = "◌"; }
+                            else if (v > 0.08 || f > 0.3) { color = CFG.colorFoam; char = "·"; }
+                            else if (w > 0.05) { color = CFG.colorWetSand; char = "▓"; } 
+                            else { color = CFG.colorDrySand; char = "░"; }             
+                        } else {
+                            if (f > 2.0) { color = CFG.colorFoam; char = "░"; } 
+                            else if (f > 0.9) { color = CFG.colorFoam; char = "*"; }
+                            else if (f > 0.3) { color = CFG.colorRipple; char = "°"; }
+                            else if (v > 0.2 || v < -0.2) { color = CFG.colorRipple; }
+                            else { 
+                                color = CFG.colorWater; 
+                                if (idx === 2) char = "∙"; 
+                            }
+                        }
+                    }
+
+                    if (x === 0) { 
+                        runColor = color; 
+                        runString = char; 
+                        runStartX = 0; 
+                    } else if (color === runColor) { 
+                        runString += char; 
+                    } else {
+                        ctx.fillStyle = runColor;
+                        ctx.fillText(runString, runStartX * charW, y * charH);
+                        runColor = color;
+                        runString = char;
+                        runStartX = x;
+                    }
+                }
+                if (runString.length > 0) {
+                    ctx.fillStyle = runColor;
+                    ctx.fillText(runString, runStartX * charW, y * charH);
+                }
+            }
+
+            // Render floating kinematic entity objects layer
+            for (let e of entities) {
+                ctx.fillStyle = e.color;
+                ctx.fillText(e.char, Math.floor(e.x) * charW, Math.floor(e.y) * charH);
+            }
+        }
+
+        function animate() {
+            if (Math.random() < CFG.rainIntensity) {
+                const rx = Math.floor(Math.random() * (W - 2)) + 1;
+                const ry = Math.floor(H * 0.75) + Math.floor(Math.random() * (H * 0.15));
+                if (ry < H - 1) current[ry][rx] = 5;
+            }
+            
+            ripple();
+            updateEntities();
+            render();
+            
+            requestAnimationFrame(animate);
+        }
+
+        // ================================================================
+        // 6. INTERACTION LOGIC
+        // ================================================================
+
+        function interact(cx, cy) {
+            const radius = 2;
+            for (let y = -radius; y <= radius; y++) {
+                const py = cy + y;
+                if (py <= 0 || py >= H - 1) continue;
+                for (let x = -radius; x <= radius; x++) {
+                    const px = cx + x;
+                    if (px > 0 && px < W - 1) {
+                        current[py][px] = 2; 
+                    }
+                }
+            }
+
+            for (let e of entities) {
+                const dx = e.x - cx;
+                const dy = e.y - cy;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 6) {
+                    e.vx += (dx / dist) * 12.5;
+                    e.vy += (dy / dist) * 12.5;
+                }
+            }
+        }
+
+        function getGridCoords(e) {
+            return {
+                x: Math.floor((e.clientX || e.touches[0].clientX) / window.innerWidth * W),
+                y: Math.floor((e.clientY || e.touches[0].clientY) / window.innerHeight * H)
+            };
+        }
+
+        canvas.addEventListener('pointerdown', e => {
+            const { x, y } = getGridCoords(e);
+            interact(x, y);
+        });
+
+        canvas.addEventListener('pointermove', e => {
+            if (e.buttons) {
+                const { x, y } = getGridCoords(e);
+                interact(x, y);
+            }
+        });
+
+        window.addEventListener('resize', resize);
+        resize();
+        animate();
+    </script>
+</body>
+</html>
