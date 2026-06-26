@@ -2,634 +2,1350 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SDF VOXEL CARVER // V6 [MONSTER MODE]</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>PANDRA_OS // MONUMENT</title>
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
+        :root {
+            --bg:       #313833;
+            --bg-deep:  #252F1C;
+            --deck:     #374334;
+            --accent:   #35474A;
+            --hi:       #ADBCBA;
+            --text:     #A6A99C;
+            --muted:    #70736D;
+            --border:   #7C887C;
+            --ember:    #483731;
+            --ember-hi: #A09080;
+            --gold:     #7C887C;
+            --gold-hi:  #ADBCBA;
+            --glow:     rgba(173,188,186,0.10);
+            --glow2:    rgba(173,188,186,0.20);
+            --stone:    #A09080;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body, html { background: #06060a; color: #00ffcc; font-family: 'Share Tech Mono', monospace; user-select: none; width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-        
-        #canvas-container { flex: 1; position: relative; width: 100%; overflow: hidden; cursor: grab; filter: brightness(.8); }
+        body, html {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Share Tech Mono', monospace;
+            user-select: none;
+            width: 100vw; height: 100vh;
+            overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+
+        /* ── CANVAS ── */
+        #canvas-container {
+            flex: 1; position: relative; width: 100%; overflow: hidden;
+            cursor: grab; background: var(--bg-deep);
+        }
         #canvas-container:active { cursor: grabbing; }
-        #canvas-container.dragover { box-shadow: inset 0 0 60px rgba(0,255,204,0.25); border: 2px dashed #00ffcc66; }
-        
-        /* --- [MONSTER] COMPRESSED UI DECK --- */
-        #ui-deck { flex: 0 0 auto; transition: all 0.25s cubic-bezier(0.1,0.8,0.3,1); position: relative; width: 100%; background: #06060a; border-top: 1px solid #00ffcc22; display: flex; flex-direction: column; }
-        #ui-deck.collapsed { height: 26px !important; overflow: hidden; }
-        #deck-tab { height: 26px; min-height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 12px; font-size: 0.55rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; background: #08080f; border-bottom: 1px solid #00ffcc11; }
-        
-        #deck-toggle-indicator { display: inline-block; margin-right: 8px; color: #00ffccaa; transition: transform 0.25s ease; }
-        #ui-deck.collapsed #deck-toggle-indicator { transform: rotate(-90deg); }
-        
-        .deck-body { flex: 1; display: flex; flex-direction: row; padding: 6px 10px; gap: 0; overflow-y: auto; }
+
+        /* ── VIGNETTE (walk mode) ── */
+        #vignette {
+            position: fixed; inset: 0; pointer-events: none; z-index: 30;
+            background: radial-gradient(ellipse at center,
+                transparent 55%,
+                rgba(37,47,28,0.55) 100%);
+            opacity: 0; transition: opacity 0.6s;
+        }
+        body.in-walk #vignette { opacity: 1; }
+
+        /* ── DECK ── */
+        #ui-deck {
+            flex: 0 0 auto;
+            width: 100%; background: var(--deck);
+            border-top: 2px solid var(--accent);
+            display: flex; flex-direction: column;
+            box-shadow: 0 -8px 24px rgba(0,0,0,0.5);
+            transition: height 0.4s cubic-bezier(0.1,0.8,0.3,1);
+        }
+        body.in-walk #ui-deck { height: 28px !important; overflow: hidden; opacity: 0.12; pointer-events: none; }
+
+        #deck-tab {
+            height: 28px; min-height: 28px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px 0 14px;
+            font-size: 0.62rem; letter-spacing: 4px; text-transform: lowercase;
+            cursor: pointer; color: var(--muted);
+            border-bottom: 1px solid rgba(173,188,186,0.05);
+        }
+        #deck-toggle { color: var(--accent); margin-right: 6px; transition: transform 0.4s; }
+        #ui-deck.collapsed #deck-toggle { transform: rotate(-90deg); }
+
+        .deck-body {
+            display: flex; flex-direction: row;
+            padding: 6px 10px; gap: 0; overflow-y: auto; opacity: 0.95;
+        }
         .col { display: flex; flex-direction: column; gap: 3px; padding-right: 12px; }
-        .col:not(:last-child) { border-right: 1px solid #00ffcc0a; margin-right: 12px; margin-bottom: 2px; }
-        .col-views { flex: 2.4; } .col-tune { flex: 1.6; } .col-tele { flex: 1; min-width: 90px; }
-        
-        .col-lbl { font-size: 0.42rem; letter-spacing: 2px; color: #0088aa; text-transform: uppercase; border-bottom: 1px dashed #00ffcc0c; padding-bottom: 2px; margin-bottom: 1px; }
+        .col:not(:last-child) { border-right: 1px solid rgba(173,188,186,0.05); margin-right: 12px; }
+        .col-views { flex: 2.2; }
+        .col-tune  { flex: 1.6; }
+        .col-tele  { flex: 1; min-width: 96px; }
+        .col-lbl {
+            font-size: 0.4rem; letter-spacing: 3px; color: var(--muted);
+            text-transform: lowercase; border-bottom: 1px dashed rgba(173,188,186,0.07);
+            padding-bottom: 2px; margin-bottom: 1px;
+        }
+
         .view-pair { display: flex; gap: 4px; }
-        .view-slot { flex: 1; display: flex; flex-direction: column; gap: 2px; background: rgba(0,255,204,0.02); border: 1px dashed #00ffcc18; padding: 3px 4px; transition: all 0.3s; }
-        #slot-top { flex: 0 0 auto; width: 100%; border-style: dotted; border-color: #00ffcc0e; opacity: 0.7; }
-        #slot-top.loaded { opacity: 1; border-color: #00ffcc44; background: rgba(0,255,204,0.04); }
-        
-        .view-slot-lbl { font-size: 0.42rem; color: #00ffcc66; text-transform: uppercase; }
-        input[type="file"] { font-size: 0.38rem; color: #00ffcc88; background: none; border: none; width: 100%; cursor: pointer; }
-        input[type="file"]::file-selector-button { background: rgba(0,255,204,0.06); border: 1px solid #00ffcc33; color: #00ffcc; font-family: inherit; font-size: 0.35rem; padding: 2px 6px; cursor: pointer; }
-        
-        .range-row { display:flex; flex-direction:column; gap:1px; margin-bottom:2px; }
-        .range-lbl { font-size:0.42rem; color:#00ccaa; text-transform:uppercase; display:flex; justify-content:space-between; }
-        .range-val { color:#00ffcc; }
-        input[type="range"] { width: 100%; accent-color: #00ffcc; height: 2px; background: #0c0c16; cursor: pointer; -webkit-appearance: none; margin: 3px 0; }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #00ffcc; cursor: pointer; border: 2px solid #06060a; box-shadow: 0 0 8px rgba(0,255,204,0.4); }
-        
-        .stat-row { font-size: 0.42rem; color: #0088aa; display: flex; justify-content: space-between; padding: 1px 0; border-bottom: 1px solid #00ffcc06; }
-        .stat-v { color:#00ffcc88; }
-        #s-state { color:#fff; font-weight:bold; }
-        .sym-note { font-size: 0.38rem; color: #0088aa; padding: 2px 4px; background: rgba(0,255,204,0.02); border: 1px solid #00ffcc0a; line-height: 1.2; margin-top: 2px; }
-        
-        .icon-btn { background: rgba(0,255,204,0.04); border: 1px solid #00ffcc22; color: #00ffccaa; font-family: inherit; font-size: 0.42rem; letter-spacing: 1px; padding: 2px 6px; cursor: pointer; transition: all 0.2s; }
-        .icon-btn:hover { background:rgba(0,255,204,0.12); border-color:#00ffcc55; color:#00ffcc; box-shadow:0 0 12px rgba(0,255,204,0.1); }
-        .icon-btn.active-toggle { background:rgba(0,255,204,0.15); border-color:#00ffcc66; color:#fff; box-shadow:0 0 8px rgba(0,255,204,0.2); }
-        
-        #canvas-container::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 10; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px); opacity: 0.5; }
-        #vignette-overlay { position: absolute; inset: 0; pointer-events: none; z-index: -1; background: radial-gradient(ellipse at center, transparent 55%, rgba(6,6,10,0.55) 85%, rgba(6,6,10,0.85) 100%); }
-        #drop-hint { position: absolute; inset: 0; pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; letter-spacing: 2px; color: #00ffcc88; text-transform: uppercase; opacity: 0; transition: opacity 0.6; }
-        #canvas-container.dragover #drop-hint { opacity: 1; }
-        #toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
-        .toast { background: #0a0a16; border: 1px solid #00ffcc44; color: #00ffcc; padding: 8px 14px; font-size: 0.4rem; letter-spacing: 1px; text-transform: uppercase; border-radius: 1px; animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2s forwards; box-shadow: 0 4px 10px rgba(0,255,204,0.08); }
-        @keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
-        @keyframes toastOut { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(40px); } }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-        .sculpting-pulse { animation: pulse 0.6s ease-in-out infinite; color: #ff0055 !important; text-shadow: 0 0 8px rgba(255,0,85,0.8); }
-        #pipeline-debug { display:none; }
-        
-        @media(max-width:580px) {
-            .deck-body { flex-direction:column; }
-            .col:not(:last-child) { border-right:none; border-bottom:1px solid #00ffcc0a; padding-right:0; margin-right:0; padding-bottom:6px; margin-bottom: 4px; }
+        .view-slot {
+            flex: 1; display: flex; flex-direction: column; gap: 2px;
+            background: rgba(55,67,52,0.35); border: 1px dashed var(--muted);
+            padding: 3px 4px; border-radius: 3px; transition: all 0.4s;
+        }
+        .view-slot.loaded { border-color: var(--border); background: rgba(53,71,74,0.12); }
+        #slot-top { opacity: 0.5; }
+        #slot-top.loaded { opacity: 0.85; }
+        .view-slot-lbl { font-size: 0.4rem; color: var(--muted); letter-spacing: 2px; }
+
+        input[type="file"] { font-size: 0.36rem; color: var(--muted); background: none; border: none; width: 100%; cursor: pointer; }
+        input[type="file"]::file-selector-button {
+            background: rgba(53,71,74,0.12); border: 1px solid rgba(53,71,74,0.3);
+            color: var(--hi); font-family: inherit; font-size: 0.6rem;
+            padding: 2px 5px; cursor: pointer; border-radius: 3px; transition: all 0.3s;
+        }
+        input[type="file"]::file-selector-button:hover { background: var(--accent); color: var(--deck); }
+
+        input[type="range"] {
+            width: 100%; accent-color: var(--border); height: 2px;
+            background: var(--bg-deep); cursor: pointer; -webkit-appearance: none; margin: 3px 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 9px; height: 9px; border-radius: 50%;
+            background: var(--border); cursor: pointer; border: 1px solid var(--bg);
+            box-shadow: 0 0 5px var(--glow);
+        }
+        .range-row { display: flex; flex-direction: column; gap: 1px; margin-bottom: 2px; }
+        .range-lbl {
+            font-size: 0.4rem; color: var(--muted); text-transform: lowercase;
+            display: flex; justify-content: space-between; letter-spacing: 1px;
+        }
+        .range-val { color: var(--hi); }
+
+        /* ── TELEMETRY ── */
+        .stat-row {
+            font-size: 0.4rem; color: var(--muted); display: flex;
+            justify-content: space-between; padding: 2px 0;
+            border-bottom: 1px solid rgba(37,47,28,0.9); letter-spacing: 1px;
+        }
+        .stat-v { color: rgba(173,188,186,0.55); }
+        .stat-state {
+            font-size: 0.44rem; padding: 3px 0 2px; color: var(--hi);
+            letter-spacing: 3px; border-bottom: 1px dashed rgba(173,188,186,0.07);
+            margin-bottom: 2px;
+        }
+
+        .sym-note {
+            font-size: 0.44rem; color: var(--muted); padding: 3px 5px;
+            background: rgba(55,67,52,0.25); border: 1px solid rgba(112,115,109,0.2);
+            line-height: 1.5; margin-top: 2px; border-radius: 3px;
+        }
+
+        /* ── BUTTONS ── */
+        .icon-btn {
+            background: transparent; border: 1px solid rgba(173,188,186,0.08);
+            color: var(--muted); font-family: inherit; font-size: 0.6rem;
+            letter-spacing: 2px; padding: 2px 7px; cursor: pointer;
+            transition: all 0.3s; border-radius: 4px;
+        }
+        .icon-btn:hover  { background: rgba(53,71,74,0.18); border-color: var(--border); color: var(--hi); }
+        .icon-btn.active { background: rgba(53,71,74,0.22); border-color: var(--border); color: var(--hi); }
+        .icon-btn.walk-on {
+            background: rgba(72,55,49,0.55); border-color: var(--stone);
+            color: var(--stone); box-shadow: 0 2px 8px rgba(72,55,49,0.4);
+        }
+        .icon-btn.jet-on  { background: rgba(53,71,74,0.35); border-color: var(--border); color: var(--hi); }
+        .icon-btn.grab-on { background: rgba(37,47,28,0.55); border-color: var(--border); color: #ADBCBA; }
+
+        /* ── OVERLAYS ── */
+        #walk-crosshair {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: 14px; height: 14px; pointer-events: none; z-index: 50;
+            display: none; opacity: 0.3;
+        }
+        #walk-crosshair::before, #walk-crosshair::after {
+            content: ''; position: absolute; background: var(--hi);
+        }
+        #walk-crosshair::before { width: 1px; height: 100%; top:0; left:50%; transform: translateX(-50%); }
+        #walk-crosshair::after  { height: 1px; width: 100%; top:50%; left:0; transform: translateY(-50%); }
+        #walk-crosshair.target { opacity: 0.9; }
+        #walk-crosshair.target::before,
+        #walk-crosshair.target::after { background: var(--stone); }
+
+        /* ── WALK HUD ── */
+        #walk-hud {
+            display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+            padding: 10px 16px;
+            background: linear-gradient(to bottom, rgba(37,47,28,0.85), transparent);
+            font-size: 0.38rem; letter-spacing: 4px; text-transform: lowercase;
+            pointer-events: none;
+            flex-direction: row; justify-content: space-between; align-items: center;
+        }
+        .whud-title { color: var(--hi); }
+        .whud-stats { display: flex; gap: 14px; }
+        .whud-stat  { color: var(--muted); }
+        .whud-stat span { color: var(--hi); }
+        #whud-jet  { color: var(--stone); display: none; }
+        #whud-jet.on { display: inline; }
+        #whud-grab { color: var(--hi); display: none; }
+        #whud-grab.on { display: inline; }
+
+        /* ── JOYSTICK ── */
+        #joy-zone {
+            display: none; position: fixed; bottom: 70px; left: 20px;
+            width: 90px; height: 90px; z-index: 50; touch-action: none;
+            border-radius: 50%; background: rgba(37,47,28,0.6);
+            border: 1px dashed var(--border); box-shadow: 0 4px 16px rgba(53,71,74,0.2);
+        }
+        #joy-knob {
+            position: absolute; width: 38px; height: 38px; border-radius: 50%;
+            background: rgba(53,71,74,0.18); border: 1.5px solid var(--border);
+            top: 50%; left: 50%; transform: translate(-50%,-50%);
+            pointer-events: none; transition: background 0.1s;
+        }
+        #joy-knob.active { background: rgba(53,71,74,0.38); border-color: var(--hi); }
+        .joy-lbl { position: absolute; font-size: 0.55rem; color: var(--border); }
+        .joy-lbl.t { top: -14px; left:50%; transform: translateX(-50%); }
+        .joy-lbl.b { bottom: -14px; left:50%; transform: translateX(-50%); }
+        .joy-lbl.l { left: -18px; top:50%; transform: translateY(-50%); }
+        .joy-lbl.r { right: -18px; top:50%; transform: translateY(-50%); }
+
+        /* ── WALK ACTION BUTTONS (touch) ── */
+        #walk-touch-btns {
+            display: none; position: fixed; bottom: 70px; right: 20px;
+            z-index: 50; flex-direction: column; gap: 8px; align-items: center;
+        }
+        .walk-touch-btn {
+            width: 64px; height: 64px; border-radius: 50%;
+            background: rgba(37,47,28,0.65);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.45rem; letter-spacing: 2px;
+            cursor: pointer; touch-action: none;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; gap: 2px;
+            transition: all 0.15s;
+        }
+        #grapple-btn {
+            border: 1.5px dashed var(--border); color: var(--hi);
+        }
+        #grapple-btn.firing {
+            background: rgba(53,71,74,0.45); border-color: var(--hi);
+            box-shadow: 0 0 16px rgba(173,188,186,0.15);
+        }
+        #jump-touch-btn {
+            border: 1.5px dashed var(--ember); color: var(--stone);
+            width: 52px; height: 52px;
+        }
+        #jump-touch-btn.active {
+            background: rgba(72,55,49,0.45); border-color: var(--stone);
+        }
+        .g-sym { font-size: 1rem; line-height: 1; }
+        .g-lbl { font-size: 0.38rem; letter-spacing: 3px; }
+
+        /* ── FLASH / FLAME ── */
+        #jump-flash {
+            position: fixed; inset: 0; pointer-events: none; z-index: 45;
+            background: rgba(72,55,49,0.12); opacity: 0; transition: opacity 0.07s;
+        }
+        #jump-flash.pop { opacity: 1; }
+        #grab-flash {
+            position: fixed; inset: 0; pointer-events: none; z-index: 45;
+            background: rgba(53,71,74,0.14); opacity: 0; transition: opacity 0.07s;
+        }
+        #grab-flash.pop { opacity: 1; }
+        #jet-flame {
+            position: fixed; bottom: 0; left: 0; right: 0; height: 90px;
+            pointer-events: none; z-index: 44;
+            background: linear-gradient(to top, rgba(72,55,49,0.18), transparent);
+            opacity: 0; transition: opacity 0.15s;
+        }
+        #jet-flame.on { opacity: 1; }
+
+        /* ── TOAST ── */
+        #toast-container {
+            position: fixed; top: 18px; right: 16px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+        }
+        .toast {
+            background: rgba(37,47,28,0.96); border-bottom: 1px solid var(--border);
+            color: var(--hi); padding: 5px 10px; font-size: 0.45rem; letter-spacing: 3px;
+            border-radius: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            animation: tIn 0.6s ease-out, tOut 1.5s ease-in 2.5s forwards;
+        }
+        @keyframes tIn  { from { opacity:0; transform: translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes tOut { from { opacity:1; } to { opacity:0; } }
+        @keyframes pulse { 0%,100% { opacity:0.8; } 50% { opacity:0.25; } }
+        .forming { animation: pulse 1.8s ease-in-out infinite; color: var(--hi) !important; }
+
+        /* ── LOOK HINT ── */
+        #look-hint {
+            display: none; position: fixed; bottom: 72px; left: 130px;
+            font-size: 0.38rem; letter-spacing: 4px;
+            color: rgba(173,188,186,0.12); pointer-events: none; line-height: 1.8;
+        }
+
+        /* ── GRAPPLE BEAM ── */
+        #grapple-beam {
+            position: fixed; inset: 0; pointer-events: none; z-index: 35;
+            opacity: 0; transition: opacity 0.1s;
+        }
+        #grapple-beam.on { opacity: 1; }
+
+        @media(max-width:5100px){
+            .deck-body { flex-direction: column; }
+            .col:not(:last-child) {
+                border-right: none; border-bottom: 1px solid rgba(173,188,186,0.04);
+                padding-right: 0; margin-right: 0; padding-bottom: 5px; margin-bottom: 3px;
+            }
         }
     </style>
 </head>
 <body>
 
 <div id="canvas-container">
-    <div id="vignette-overlay"></div>
-    <div id="drop-hint">⬇ DROP IMAGE HERE</div>
+    <div id="drop-hint" style="position:absolute;inset:0;pointer-events:none;z-index:20;display:flex;align-items:center;justify-content:center;font-size:0.55rem;letter-spacing:6px;color:rgba(173,188,186,0.18);text-transform:lowercase;opacity:0;transition:opacity 1s;">d r o p &nbsp; i m a g e s</div>
 </div>
-<div id="toast-container"></div>
 
+<div id="vignette"></div>
+<div id="toast-container"></div>
+<div id="walk-crosshair"></div>
+<div id="jump-flash"></div>
+<div id="grab-flash"></div>
+<div id="jet-flame"></div>
+
+<!-- Walk HUD -->
+<div id="walk-hud">
+    <div class="whud-title">∴ &nbsp; p a n d r a _ o s</div>
+    <div class="whud-stats">
+        <div class="whud-stat">pos <span id="wh-pos">—</span></div>
+        <div class="whud-stat">yaw <span id="wh-yaw">—</span></div>
+        <div class="whud-stat">spd <span id="wh-spd">—</span></div>
+        <div class="whud-stat" id="whud-jet">✦ jet</div>
+        <div class="whud-stat" id="whud-grab">⊕ grapple</div>
+    </div>
+</div>
+
+<!-- Joystick -->
+<div id="joy-zone">
+    <span class="joy-lbl t">△</span>
+    <span class="joy-lbl b">▽</span>
+    <span class="joy-lbl l">◁</span>
+    <span class="joy-lbl r">▷</span>
+    <div id="joy-knob"></div>
+</div>
+
+<!-- Touch action buttons -->
+<div id="walk-touch-btns">
+    <div class="walk-touch-btn" id="grapple-btn">
+        <span class="g-sym">⊕</span>
+        <span class="g-lbl">grab</span>
+    </div>
+    <div class="walk-touch-btn" id="jump-touch-btn">
+        <span class="g-sym" style="font-size:0.8rem;">↑</span>
+        <span class="g-lbl">jump</span>
+    </div>
+</div>
+
+<div id="look-hint">s w i p e<br>t o &nbsp; l o o k</div>
+
+<!-- ── DECK ── -->
 <div id="ui-deck">
     <div id="deck-tab">
-        <span class="title"><span id="deck-toggle-indicator">▼</span>◈ SDF ENGINE // V6 [MONSTER GLIDE]</span>
-        <div class="btn-row" style="display: flex; gap: 4px;">
-            <button class="icon-btn" id="btn-auto-rotate" title="Toggle Friction (A)">⟳ GLIDE: ON</button>
-            <button class="icon-btn" id="btn-reset-cam" title="Reset camera view (R)">⌂ RESET</button>
-            <button class="icon-btn" id="btn-screenshot" title="Save screenshot (Space)">⬇ PNG</button>
+        <span><span id="deck-toggle">▼</span> p a n d r a _ o s &nbsp; / / &nbsp; m o n u m e n t</span>
+        <div style="display:flex;gap:6px;">
+            <button class="icon-btn" id="btn-jetpack">j e t p a c k</button>
+            <button class="icon-btn" id="btn-walk-toggle">w a n d e r</button>
+            <button class="icon-btn" id="btn-auto-rotate">d r i f t</button>
+            <button class="icon-btn" id="btn-reset-cam">r e t u r n</button>
+            <button class="icon-btn" id="btn-screenshot">k e e p</button>
         </div>
     </div>
 
     <div class="deck-body">
+
+        <!-- VIEWS -->
         <div class="col col-views">
-            <div class="col-lbl">Tri-Directional Input</div>
+            <div class="col-lbl">directions</div>
             <div class="view-pair">
                 <div class="view-slot" id="slot-front">
-                    <div class="view-slot-lbl">Front (N/S)</div>
+                    <div class="view-slot-lbl">f r o n t</div>
                     <input type="file" id="load-front" accept="image/*">
                 </div>
                 <div class="view-slot" id="slot-side">
-                    <div class="view-slot-lbl">Side (E/W)</div>
+                    <div class="view-slot-lbl">s i d e</div>
                     <input type="file" id="load-side" accept="image/*">
                 </div>
             </div>
             <div class="view-slot" id="slot-top">
-                <div class="view-slot-lbl">Top (Y↓) <span style="float:right; font-size:0.38rem; color:#00ffcc33;">optional</span></div>
+                <div class="view-slot-lbl">t o p &nbsp;<span style="float:right;font-size:0.36rem;color:var(--muted);">fading</span></div>
                 <input type="file" id="load-top" accept="image/*">
             </div>
             <div class="sym-note">
-                <span style="color:#00ffcc">Left-Click:</span> Orbit · <span style="color:#00ffcc">Right-Click:</span> Pan · <span style="color:#00ffcc">Scroll:</span> Zoom
+                <span style="color:var(--hi)">look</span> &nbsp;swipe right side<br>
+                <span style="color:var(--hi)">move</span> &nbsp;joystick left · WASD<br>
+                <span style="color:var(--hi)">jump</span> &nbsp;tap joystick · Space<br>
+                <span style="color:var(--hi)">grab</span> &nbsp;⊕ button · F key<br>
+                <span style="color:var(--hi)">jet</span> &nbsp;&nbsp;hold jump while airborne<br>
+                <span style="color:var(--hi)">reset</span> &nbsp;r e t u r n button · R
             </div>
         </div>
 
+        <!-- TUNE -->
         <div class="col col-tune">
-            <div class="col-lbl">Volume Logic</div>
+            <div class="col-lbl">memory</div>
             <div class="range-row">
-                <div class="range-lbl">Grid Res <span class="range-val" id="v-resolution">112</span>³</div>
-                <input type="range" id="resolution" min="16" max="164" step="4" value="112">
+                <div class="range-lbl">density <span class="range-val" id="v-resolution">80</span>³</div>
+                <input type="range" id="resolution" min="4" max="80" step="4" value="80">
             </div>
             <div class="range-row">
-                <div class="range-lbl">Luma Carve <span class="range-val" id="v-lumaCarve">0.60</span></div>
-                <input type="range" id="lumaCarve" min="0" max="1" step="0.01" value="0.6">
+                <div class="range-lbl">shadows <span class="range-val" id="v-lumaCarve">0.10</span></div>
+                <input type="range" id="lumaCarve" min="0" max="100" step="1" value="31">
             </div>
             <div class="range-row">
-                <div class="range-lbl">Edge Bevel <span class="range-val" id="v-sculpt">4</span>px</div>
-                <input type="range" id="sculpt" min="0" max="40" step="1" value="4">
+                <div class="range-lbl">softness <span class="range-val" id="v-sculpt">0</span></div>
+                <input type="range" id="sculpt" min="0" max="100" step="1" value="21">
             </div>
             <div class="range-row">
-                <div class="range-lbl">Chroma Thresh <span class="range-val" id="v-threshold">40</span></div>
-                <input type="range" id="threshold" min="5" max="180" value="40">
+                <div class="range-lbl">loss <span class="range-val" id="v-threshold">10</span></div>
+                <input type="range" id="threshold" min="0" max="100" step="1" value="10">
             </div>
-            <div class="range-row" style="margin-top:2px;">
-                <div class="range-lbl" style="cursor:pointer;background:#00ffcc11;border:1px solid #00ffcc44;padding:2px 6px;justify-content:center;" id="btn-color">
-                    MODE: &nbsp;<span class="range-val" id="v-color">SOURCE</span>
+            <div class="range-row">
+                <div class="range-lbl">hollow <span class="range-val" id="v-hollow">0</span></div>
+                <input type="range" id="hollow" min="0" max="100" step="1" value="0">
+            </div>
+            <div class="range-row">
+                <div class="range-lbl">grab reach <span class="range-val" id="v-reach">9300</span></div>
+                <input type="range" id="grab-reach" min="50" max="6800" step="10" value="9300">
+            </div>
+            <div class="range-row">
+                <div class="range-lbl">grab force <span class="range-val" id="v-burst">90</span></div>
+                <input type="range" id="grab-burst" min="10" max="200" step="5" value="90">
+            </div>
+            <div style="margin-top:3px;">
+                <div class="range-lbl" style="cursor:pointer;border:1px solid rgba(173,188,186,0.08);padding:2px 5px;justify-content:center;" id="btn-color">
+                    color &nbsp;<span class="range-val" id="v-color">source</span>
                 </div>
             </div>
         </div>
+    </div><!-- /deck-body -->
+</div><!-- /ui-deck -->
 
-        <div class="col col-tele">
-            <div class="col-lbl">Telemetry</div>
-            <div class="stat-row">VOXELS <span class="stat-v" id="s-vox">—</span></div>
-            <div class="stat-row">GRID   <span class="stat-v" id="s-grid">—</span></div>
-            <div class="stat-row">VIEWS  <span class="stat-v" id="s-views">0/3</span></div>
-            <div class="stat-row">SDF    <span class="stat-v" id="s-sdf">WORKER</span></div>
-            <div class="stat-row">STATE  <span class="stat-v" id="s-state">IDLE</span></div>
-            <div class="stat-row" style="margin-top:2px;">BUILD  <span class="stat-v" id="s-build-time">—</span></div>
-        </div>
-    </div>
-</div>
-
-<div id="pipeline-debug">
+<!-- hidden canvases -->
+<div style="display:none;">
     <canvas id="canv-front"></canvas>
     <canvas id="canv-side"></canvas>
     <canvas id="canv-top"></canvas>
 </div>
 
 <script type="js/worker" id="voxel-worker">
-    const cache = { front: null, side: null, top: null, thresh: -1, dirty: { front: true, side: true, top: true } };
-    function sqAdd(dSq, step) { return dSq + 2 * step * Math.sqrt(dSq) + step * step; }
+    const cache = { front:null, side:null, top:null, thresh:-1, dirty:{front:true,side:true,top:true} };
+    function sqAdd(dSq,step){ return dSq+2*step*Math.sqrt(dSq)+step*step; }
 
-    function extractSDF(imgData, w, h, thresh) {
-        const d = imgData.data;
-        const w4 = w * 4;
-        const corners = [0, w4-4, (h-1)*w4, h*w4-4];
-        let bgR=0, bgG=0, bgB=0;
-        corners.forEach(c => { bgR+=d[c]; bgG+=d[c+1]; bgB+=d[c+2]; });
-        bgR/=4; bgG/=4; bgB/=4;
-
-        const INF = 1e9;
-        const dist = new Float32Array(w * h);
-        const luma = new Float32Array(w * h);
+    function extractSDF(imgData,w,h,thresh){
+        const d=imgData.data, w4=w*4;
+        const corners=[0,w4-4,(h-1)*w4,h*w4-4];
+        let bgR=0,bgG=0,bgB=0;
+        corners.forEach(c=>{bgR+=d[c];bgG+=d[c+1];bgB+=d[c+2];});
+        bgR/=8;bgG/=8;bgB/=8;
+        const INF=1e9,dist=new Float32Array(w*h),luma=new Float32Array(w*h);
         dist.fill(INF);
-        const tSq = thresh * thresh;
-
-        for (let i = 0; i < w * h; i++) {
-            const idx = i * 4;
-            const r = d[idx], g = d[idx+1], b = d[idx+2];
-            luma[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-            const cSq = (r-bgR)**2 + (g-bgG)**2 + (b-bgB)**2;
-            if (cSq <= tSq) dist[i] = 0;
+        const tSq=thresh*thresh;
+        for(let i=0;i<w*h;i++){
+            const idx=i*4,r=d[idx],g=d[idx+1],b=d[idx+2];
+            luma[i]=(0.299*r+0.587*g+0.114*b)/255.0;
+            if((r-bgR)**2+(g-bgG)**2+(b-bgB)**2<=tSq)dist[i]=0;
         }
-
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-                const i = y * w + x;
-                if (dist[i] === 0) continue;
-                let best = dist[i];
-                if (y > 0) { const v = dist[(y-1)*w+x]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
-                if (x > 0) { const v = dist[y*w+x-1]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
-                if (y > 0 && x > 0) { const v = dist[(y-1)*w+x-1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
-                if (y > 0 && x < w-1) { const v = dist[(y-1)*w+x+1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
-                dist[i] = best;
-            }
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+            const i=y*w+x;if(dist[i]===0)continue;let best=dist[i];
+            if(y>0){const v=dist[(y-1)*w+x];if(v<INF)best=Math.min(best,sqAdd(v,1));}
+            if(x>0){const v=dist[y*w+x-1];if(v<INF)best=Math.min(best,sqAdd(v,1));}
+            if(y>0&&x>0){const v=dist[(y-1)*w+x-1];if(v<INF)best=Math.min(best,sqAdd(v,Math.SQRT2));}
+            if(y>0&&x<w-1){const v=dist[(y-1)*w+x+1];if(v<INF)best=Math.min(best,sqAdd(v,Math.SQRT2));}
+            dist[i]=best;
         }
-        for (let y = h-1; y >= 0; y--) {
-            for (let x = w-1; x >= 0; x--) {
-                const i = y * w + x;
-                if (dist[i] === 0) continue;
-                let best = dist[i];
-                if (y < h-1) { const v = dist[(y+1)*w+x]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
-                if (x < w-1) { const v = dist[y*w+x+1]; if(v<INF) best = Math.min(best, sqAdd(v, 1)); }
-                if (y < h-1 && x > 0) { const v = dist[(y+1)*w+x-1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
-                if (y < h-1 && x < w-1) { const v = dist[(y+1)*w+x+1]; if(v<INF) best = Math.min(best, sqAdd(v, Math.SQRT2)); }
-                dist[i] = best;
-            }
+        for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){
+            const i=y*w+x;if(dist[i]===0)continue;let best=dist[i];
+            if(y<h-1){const v=dist[(y+1)*w+x];if(v<INF)best=Math.min(best,sqAdd(v,1));}
+            if(x<w-1){const v=dist[y*w+x+1];if(v<INF)best=Math.min(best,sqAdd(v,1));}
+            if(y<h-1&&x>0){const v=dist[(y+1)*w+x-1];if(v<INF)best=Math.min(best,sqAdd(v,Math.SQRT2));}
+            if(y<h-1&&x<w-1){const v=dist[(y+1)*w+x+1];if(v<INF)best=Math.min(best,sqAdd(v,Math.SQRT2));}
+            dist[i]=best;
         }
-        return { dist, luma, pixels: d, w, h };
+        return{dist,luma,pixels:d,w,h};
     }
 
-    function hslToRgb(h, s, l) {
-        let r, g, b;
-        if(s === 0) r = g = b = l; 
-        else {
-            const hue2rgb = (p, q, t) => {
-                if(t < 0) t += 1; if(t > 1) t -= 1;
-                if(t < 1/6) return p + (q - p) * 6 * t;
-                if(t < 1/2) return q;
-                if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-                return p;
-            };
-            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-            const p = 2 * l - q;
-            r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3);
+    function hslToRgb(h,s,l){
+        let r,g,b;
+        if(s===0)r=g=b=l;
+        else{
+            const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;
+            const hue2rgb=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};
+            r=hue2rgb(p,q,h+1/3);g=hue2rgb(p,q,h);b=hue2rgb(p,q,h-1/3);
         }
-        return [r, g, b];
+        return[r,g,b];
     }
 
-    self.onmessage = function(e) {
-        const msg = e.data;
-        if (msg.type === 'update_image') {
-            cache[msg.view] = { imgData: msg.imgData, w: msg.imgData.width, h: msg.imgData.height };
-            cache.dirty[msg.view] = true; return;
-        }
 
-        if (msg.type === 'build') {
-            const t0 = performance.now();
-            const { cfg, jobId } = msg;
+    self.onmessage=function(e){
+        const msg=e.data;
+        if(msg.type==='update_image'){cache[msg.view]={imgData:msg.imgData,w:msg.imgData.width,h:msg.imgData.height};cache.dirty[msg.view]=true;return;}
+        if(msg.type==='build'){
+            const t0=performance.now(),{cfg,jobId}=msg;
+            if(cfg.threshold!==cache.thresh){cache.dirty.front=cache.dirty.side=cache.dirty.top=true;cache.thresh=cfg.threshold;}
+            if(cache.dirty.front&&cache.front){cache.front.sdf=extractSDF(cache.front.imgData,cache.front.w,cache.front.h,cfg.threshold);cache.dirty.front=false;}
+            if(cache.dirty.side&&cache.side){cache.side.sdf=extractSDF(cache.side.imgData,cache.side.w,cache.side.h,cfg.threshold);cache.dirty.side=false;}
+            if(cache.dirty.top&&cache.top){cache.top.sdf=extractSDF(cache.top.imgData,cache.top.w,cache.top.h,cfg.threshold);cache.dirty.top=false;}
+            if(!cache.front||!cache.side){self.postMessage({type:'done',jobId,activeCount:0,time:performance.now()-t0});return;}
+            const sdfF=cache.front.sdf,sdfS=cache.side.sdf,sdfT=cache.top?cache.top.sdf:null;
+            const useTop=!!sdfT,res=cfg.resolution,maxInstances=res*res*res;
+            const matrices=new Float32Array(maxInstances*16),colors=new Float32Array(maxInstances*3);
+            const span=cfg.span,step=span/res;
+            let activeCount=0;
+            const offsetXZ=-span/2+step/2;
+            const sculptRSq=cfg.sculpt*cfg.sculpt,lumaP=cfg.lumaCarve;
+            const hollowRSq=cfg.hollowRadius>0?cfg.hollowRadius*cfg.hollowRadius:-1;
 
-            if (cfg.threshold !== cache.thresh) {
-                cache.dirty.front = cache.dirty.side = cache.dirty.top = true;
-                cache.thresh = cfg.threshold;
-            }
-
-            if (cache.dirty.front && cache.front) { cache.front.sdf = extractSDF(cache.front.imgData, cache.front.w, cache.front.h, cfg.threshold); cache.dirty.front = false; }
-            if (cache.dirty.side && cache.side) { cache.side.sdf = extractSDF(cache.side.imgData, cache.side.w, cache.side.h, cfg.threshold); cache.dirty.side = false; }
-            if (cache.dirty.top && cache.top) { cache.top.sdf = extractSDF(cache.top.imgData, cache.top.w, cache.top.h, cfg.threshold); cache.dirty.top = false; }
-
-            if (!cache.front || !cache.side) { self.postMessage({ type: 'done', jobId, activeCount: 0, time: performance.now() - t0 }); return; }
-
-            const sdfF = cache.front.sdf, sdfS = cache.side.sdf, sdfT = cache.top ? cache.top.sdf : null;
-            const useTop = !!sdfT, res = cfg.resolution;
-            const maxInstances = res * res * res;
-            
-            const matrices = new Float32Array(maxInstances * 16);
-            const colors = new Float32Array(maxInstances * 3);
-            
-            const step = 1.8 / res, sizeFactor = step * (1 - cfg.blockGap);
-            let activeCount = 0;
-            const offset = -0.9 + step / 2, span = 1.8, sculptRSq = cfg.sculpt * cfg.sculpt, lumaP = cfg.lumaCarve;
-
-            const lutY = new Float32Array(res), lutNY = new Float32Array(res), lutImgY = new Int32Array(res);
-            const lutX = new Float32Array(res), lutNX = new Float32Array(res), lutImgX_F = new Int32Array(res), lutImgX_T = new Int32Array(res);
-            const lutZ = new Float32Array(res), lutNZ = new Float32Array(res), lutImgX_S = new Int32Array(res), lutImgY_T = new Int32Array(res);
-
-            for (let i = 0; i < res; i++) {
-                lutY[i] = (i/res) * span + offset; lutNY[i] = (1.0 - i / (res - 1)) * 2.0 - 1.0;
-                lutImgY[i] = Math.floor((1 - i/res) * (sdfF.h - 1)) * sdfF.w;
-                lutX[i] = (i/res) * span + offset; lutNX[i] = (i / (res - 1)) * 2.0 - 1.0;
-                lutImgX_F[i] = Math.floor((i/res) * (sdfF.w - 1));
-                if (useTop) lutImgX_T[i] = Math.floor((i/res) * (sdfT.w - 1));
-                lutZ[i] = (i/res) * span + offset; lutNZ[i] = (i / (res - 1)) * 2.0 - 1.0;
-                lutImgX_S[i] = Math.floor((i/res) * (sdfS.w - 1));
-                if (useTop) lutImgY_T[i] = Math.floor((i/res) * (sdfT.h - 1)) * sdfT.w;
-            }
-
-            for (let y = 0; y < res; y++) {
-                const rowOffsetF = lutImgY[y], rowOffsetS = lutImgY[y], yPos = lutY[y], ny = lutNY[y];
-                for (let x = 0; x < res; x++) {
-                    const idxF = rowOffsetF + lutImgX_F[x];
-                    const dFSq = sdfF.dist[idxF];
-                    if (dFSq === 0) continue; 
-                    const xPos = lutX[x], nx = lutNX[x], topXPart = useTop ? lutImgX_T[x] : 0;
-                    for (let z = 0; z < res; z++) {
-                        const idxS = rowOffsetS + lutImgX_S[z];
-                        const dSSq = sdfS.dist[idxS];
-                        if (dSSq === 0) continue; 
-
-                        const nz = lutNZ[z];
-                        if (useTop && sdfT.dist[lutImgY_T[z] + topXPart] === 0) continue;
-
-                        if (lumaP > 0) {
-                            if (Math.abs(nz) > 1.0 - lumaP * (1.0 - sdfF.luma[idxF])) continue;
-                            if (Math.abs(nx) > 1.0 - lumaP * (1.0 - sdfS.luma[idxS])) continue;
-                            if (useTop && Math.abs(ny) > 1.0 - lumaP * (1.0 - sdfT.luma[lutImgY_T[z] + topXPart])) continue;
-                        }
-
-                        if (cfg.sculpt > 0 && dFSq <= sculptRSq && dSSq <= sculptRSq) {
-                            const cornerX = cfg.sculpt - Math.sqrt(dFSq), cornerZ = cfg.sculpt - Math.sqrt(dSSq);
-                            if ((cornerX*cornerX + cornerZ*cornerZ) > sculptRSq) continue;
-                        }
-
-                        const sF = sizeFactor * (0.6 + 0.4 * Math.min(1.0, Math.sqrt(Math.min(dFSq, dSSq)) / 3));
-                        
-                        const mIdx = activeCount * 16;
-                        matrices[mIdx]   = sF; matrices[mIdx+1] = 0;  matrices[mIdx+2]  = 0;  matrices[mIdx+3]  = 0;
-                        matrices[mIdx+4] = 0;  matrices[mIdx+5] = sF; matrices[mIdx+6]  = 0;  matrices[mIdx+7]  = 0;
-                        matrices[mIdx+8] = 0;  matrices[mIdx+9] = 0;  matrices[mIdx+10] = sF; matrices[mIdx+11] = 0;
-                        matrices[mIdx+12]= xPos; matrices[mIdx+13]= yPos; matrices[mIdx+14]= lutZ[z]; matrices[mIdx+15]= 1;
-
-                        const cIdx = activeCount * 3;
-                        if (cfg.colorMode === 'source') {
-                            const pF = idxF * 4;
-                            colors[cIdx] = sdfF.pixels[pF]/255.0; colors[cIdx+1] = sdfF.pixels[pF+1]/255.0; colors[cIdx+2] = sdfF.pixels[pF+2]/255.0;
-                        } else {
-                            const depthMap = Math.min(1.0, Math.sqrt(Math.max(dFSq, dSSq)) / 15.0);
-                            const rgb = hslToRgb(0.5 - depthMap*0.1, 1.0, 0.2 + depthMap*0.6);
-                            colors[cIdx] = rgb[0]; colors[cIdx+1] = rgb[1]; colors[cIdx+2] = rgb[2];
-                        }
-                        activeCount++;
-                    }
+                       function sampleOccupancy(px,py,pz){
+                px=Math.max(0,Math.min(1,px));py=Math.max(0,Math.min(1,py));pz=Math.max(0,Math.min(1,pz));
+                const imgY_F=Math.floor((1-py)*(sdfF.h-1))*sdfF.w,imgX_F=Math.floor(px*(sdfF.w-1)),idxF=imgY_F+imgX_F;
+                const dFSq=sdfF.dist[idxF];if(dFSq===0)return null;
+                const imgY_S=Math.floor((1-py)*(sdfS.h-1))*sdfS.w,imgX_S=Math.floor(pz*(sdfS.w-1)),idxS=imgY_S+imgX_S;
+                const dSSq=sdfS.dist[idxS];if(dSSq===0)return null;
+                let idxT=0;
+                if(useTop){const imgY_T=Math.floor(pz*(sdfT.h-1))*sdfT.w,imgX_T=Math.floor(px*(sdfT.w-1));idxT=imgY_T+imgX_T;if(sdfT.dist[idxT]===0)return null;}
+                if(hollowRSq>0){const minDSq=Math.min(dFSq,dSSq,useTop?sdfT.dist[idxT]:Infinity);if(minDSq>hollowRSq)return null;}
+                if(lumaP>0){
+                    const ny=(1.0-py)*2.0-1.0,nx=px*2.0-1.0,nz=pz*2.0-1.0;
+                    if(Math.abs(nz)>1.0-lumaP*(1.0-sdfF.luma[idxF]))return null;
+                    if(Math.abs(nx)>1.0-lumaP*(1.0-sdfS.luma[idxS]))return null;
+                    if(useTop&&Math.abs(ny)>1.0-lumaP*(1.0-sdfT.luma[idxT]))return null;
                 }
+                if(cfg.sculpt>0&&dFSq<=sculptRSq&&dSSq<=sculptRSq){const cX=cfg.sculpt-Math.sqrt(dFSq),cZ=cfg.sculpt-Math.sqrt(dSSq);if((cX*cX+cZ*cZ)>sculptRSq)return null;}
+                
+                // ── TELEMETRY INJECTED INSIDE SCOPE ──
+                if(Math.random()<0.0001){
+                    console.log(
+                        Math.sqrt(dFSq),
+                        Math.sqrt(dSSq)
+                    );
+                }
+
+                return{dFSq,dSSq,idxF};
             }
-            const finalMatrices = matrices.slice(0, activeCount * 16);
-            const finalColors = colors.slice(0, activeCount * 3);
-            self.postMessage({ type: 'done', jobId, activeCount, time: performance.now() - t0, matrices: finalMatrices, colors: finalColors }, [finalMatrices.buffer, finalColors.buffer]);
+
+
+
+            let minActiveY=Infinity;
+            function emitVoxel(bx,by,bz,bSize,sample){
+                const xPos=(bx+bSize/2)*span-span/2,yPos=(by+bSize/2)*span,zPos=(bz+bSize/2)*span-span/2;
+                if(yPos<minActiveY)minActiveY=yPos;
+                const nodeSize=bSize*span*(1-cfg.blockGap);
+                const mIdx=activeCount*16;
+                matrices[mIdx]=nodeSize;matrices[mIdx+1]=0;matrices[mIdx+2]=0;matrices[mIdx+3]=0;
+                matrices[mIdx+4]=0;matrices[mIdx+5]=nodeSize;matrices[mIdx+6]=0;matrices[mIdx+7]=0;
+                matrices[mIdx+8]=0;matrices[mIdx+9]=0;matrices[mIdx+10]=nodeSize;matrices[mIdx+11]=0;
+                matrices[mIdx+12]=xPos;matrices[mIdx+13]=yPos;matrices[mIdx+14]=zPos;matrices[mIdx+15]=1;
+                const cIdx=activeCount*3;
+                if(cfg.colorMode==='source'){
+                    const pF=sample.idxF*4;
+                    colors[cIdx]=sdfF.pixels[pF]/255;colors[cIdx+1]=sdfF.pixels[pF+1]/255;colors[cIdx+2]=sdfF.pixels[pF+2]/255;
+                } else {
+                    const depthMap=Math.min(1.0,Math.sqrt(Math.max(sample.dFSq,sample.dSSq))/15.0);
+                    const rgb=hslToRgb(0.55-depthMap*0.05,0.4,0.2+depthMap*0.5);
+                    colors[cIdx]=rgb[0];colors[cIdx+1]=rgb[1];colors[cIdx+2]=rgb[2];
+                }
+                activeCount++;
+            }
+
+            const stack=[{x:0,y:0,z:0,size:1.0}];
+            const baseStep=1.0/res;
+            while(stack.length>0){
+                const node=stack.pop();
+                const half=node.size/2;
+                const cs=sampleOccupancy(node.x+half,node.y+half,node.z+half);
+                if(node.size<=baseStep+0.0001){if(cs)emitVoxel(node.x,node.y,node.z,node.size,cs);continue;}
+                let baseOcc=!!cs,split=false;
+                const corners=[[node.x,node.y,node.z],[node.x+node.size,node.y,node.z],[node.x,node.y+node.size,node.z],[node.x+node.size,node.y+node.size,node.z],[node.x,node.y,node.z+node.size],[node.x+node.size,node.y,node.z+node.size],[node.x,node.y+node.size,node.z+node.size],[node.x+node.size,node.y+node.size,node.z+node.size]];
+                for(let i=0;i<8;i++){if(!!sampleOccupancy(corners[i][0],corners[i][1],corners[i][2])!==baseOcc){split=true;break;}}
+                if(!split&&cs){const ed=Math.min(Math.sqrt(cs.dFSq),Math.sqrt(cs.dSSq));if(ed/Math.max(sdfF.w,sdfF.h)<node.size*1.2)split=true;}
+                if(split){
+                    stack.push({x:node.x,y:node.y,z:node.z,size:half});
+                    stack.push({x:node.x+half,y:node.y,z:node.z,size:half});
+                    stack.push({x:node.x,y:node.y+half,z:node.z,size:half});
+                    stack.push({x:node.x+half,y:node.y+half,z:node.z,size:half});
+                    stack.push({x:node.x,y:node.y,z:node.z+half,size:half});
+                    stack.push({x:node.x+half,y:node.y,z:node.z+half,size:half});
+                    stack.push({x:node.x,y:node.y+half,z:node.z+half,size:half});
+                    stack.push({x:node.x+half,y:node.y+half,z:node.z+half,size:half});
+                } else { if(cs)emitVoxel(node.x,node.y,node.z,node.size,cs); }
+            }
+            if(activeCount>0){
+                const shiftDown=cfg.floorY-minActiveY+(step/2);
+                for(let i=0;i<activeCount;i++)matrices[i*16+13]+=shiftDown;
+            }
+            const fM=matrices.slice(0,activeCount*16),fC=colors.slice(0,activeCount*3);
+            self.postMessage({type:'done',jobId,activeCount,time:performance.now()-t0,matrices:fM,colors:fC},[fM.buffer,fC.buffer]);
         }
     };
 </script>
 
+
 <script>
-let CFG = { resolution: 112, threshold: 40, blockGap: 0.0, sculpt: 4, lumaCarve: 0.6, colorMode: 'source' };
-const INTERNAL_IMAGE_SANDBOX = 128;
-let scene, camera, renderer, controls, instancedMesh, particleSystem;
-const ctxs = {};
-const loaded = { front: false, side: false, top: false };
+    // ── BUG FIX: slider remapping (sculpt was dividing by 10000, fixed to 100) ──
+    function sliderToThreshold(t){ return Math.round((t/100)*(t/100)*180); }
+    function sliderToSculpt(t)   { const n=t/100; return Math.round(n*n*1000); }  // FIXED: was t/10000
+    function sliderToLuma(t)     { const n=t/100; return Math.round(n*n*1)/100; }
+    function sliderToHollow(t)   { if(t===0)return 0; return Math.round(1+(t/100)*(t/100)*119); }
 
-// --- MANUAL GLIDE CORE MOTOR VARIABLES ---
-let isIntersecting = false;
-let lastMousePos = { x: 0, y: 0 };
-let mouseVelocity = { x: 0, y: 0 };
-let frictionEnabled = false; 
+    // ── WORLD CONSTANTS ──
+    const SPAN         = 1200;
+    const WORLD_HALF   = SPAN;
+    const WORLD_FLOOR  = 0;
+    const EYE_HEIGHT   = .8;
+    const MOVE_SPEED   = 56;
+    const GRAVITY      = -28.0;
+    const JUMP_FORCE   = 36.0;
+    const JETPACK_LIFT = 28.0;
+    const JETPACK_DRIFT= 0.96;
+    const CAMERA_FAR   = 111600;
+    const LOOK_SENS    = 0.008;
+    const JOY_R        = 44;
+    const PI_2         = Math.PI/2;
+    const JUMP_TAP_MS  = 280;
+    const JUMP_TAP_DIST= 12;
+    const PLAYER_RADIUS= 1.6;
 
-let currentJobId = 0;
-let pendingBuild = false;
-
-// DOM Cache
-const DOM = {
-    state: document.getElementById('s-state'),
-    vox: document.getElementById('s-vox'),
-    grid: document.getElementById('s-grid'),
-    views: document.getElementById('s-views'),
-    buildTime: document.getElementById('s-build-time'),
-    btnRot: document.getElementById('btn-auto-rotate')
-};
-
-const workerBlob = new Blob([document.getElementById('voxel-worker').textContent], { type: 'application/javascript' });
-const worker = new Worker(URL.createObjectURL(workerBlob));
-
-function showToast(msg, duration=3000) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    toast.className = 'toast'; toast.textContent = msg;
-    container.appendChild(toast);
-    setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, duration);
-}
-
-function debounceInput(fn, delay) {
-    let timer; return function(...args) { clearTimeout(timer); timer = setTimeout(()=>fn.apply(this,args), delay); };
-}
-
-function init() {
-    const container = document.getElementById('canvas-container');
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x06060a);
-    scene.fog = new THREE.Fog(0x06060a, 3.5, 12);
-
-    camera = new THREE.PerspectiveCamera(40, container.clientWidth/container.clientHeight, 0.1, 100);
-    camera.position.set(2.8, 2.2, 2.8);
-
-    renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance', preserveDrawingBuffer:true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1; 
-    container.appendChild(renderer.domElement);
-
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = false; 
-    controls.dampingFactor = 0.05; 
-    controls.screenSpacePanning = true; 
-    controls.panSpeed = 2;
-    controls.autoRotate = false;
-
-    // --- INTERACTIVE MOTION TRACKER ---
-    const canvas = renderer.domElement;
-    canvas.addEventListener('pointerdown', (e) => {
-        isIntersecting = true;
-        lastMousePos.x = e.clientX;
-        lastMousePos.y = e.clientY;
-        mouseVelocity.x = 0;
-        mouseVelocity.y = 0;
-    });
-    window.addEventListener('pointermove', (e) => {
-        if (!isIntersecting) return;
-        mouseVelocity.x = e.clientX - lastMousePos.x;
-        mouseVelocity.y = e.clientY - lastMousePos.y;
-        lastMousePos.x = e.clientX;
-        lastMousePos.y = e.clientY;
-    });
-    window.addEventListener('pointerup', () => { isIntersecting = false; });
-    window.addEventListener('pointercancel', () => { isIntersecting = false; });
-
-    scene.add(new THREE.AmbientLight(0xffffff, 1));
-    const dl = new THREE.DirectionalLight(0xffffff, 0.4); dl.position.set(5,8,5); scene.add(dl);
-    const dl2 = new THREE.DirectionalLight(0xffffff, 0.3); dl2.position.set(-5,2,-5); scene.add(dl2); 
-
-    const grid = new THREE.GridHelper(6, 12, 0x004433, 0x001111);
-    grid.position.y = -1.0; scene.add(grid);
-
-    createParticles();
-
-    ctxs.front = document.getElementById('canv-front').getContext('2d', { willReadFrequently:true });
-    ctxs.side  = document.getElementById('canv-side').getContext('2d', { willReadFrequently:true });
-    ctxs.top   = document.getElementById('canv-top').getContext('2d', { willReadFrequently:true });
-
-    generateFallbacks();
-    updateWorkerImage('front'); updateWorkerImage('side'); updateWorkerImage('top');
-    requestBuild();
-
-    window.addEventListener('resize', () => {
-        camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, container.clientHeight);
-    });
-
-    setupDragAndDrop();
-    window.addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT') handleKeyboard(e.key.toLowerCase()); });
-    updateFrictionState();
-}
-
-function createParticles() {
-    const geo = new THREE.BufferGeometry();
-    const pos = new Float32Array(600 * 3);
-    for(let i=0; i<300; i++) { pos[i*3]=(Math.random()-0.5)*8; pos[i*3+1]=(Math.random()-0.5)*8; pos[i*3+2]=(Math.random()-0.5)*8; }
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    particleSystem = new THREE.Points(geo, new THREE.PointsMaterial({ color:0x00ffcc, size:0.015, transparent:true, opacity:0.3, blending:THREE.AdditiveBlending }));
-    scene.add(particleSystem);
-}
-
-function updateWorkerImage(view) {
-    const w = ctxs[view].canvas.width; const h = ctxs[view].canvas.height;
-    worker.postMessage({ type: 'update_image', view, imgData: ctxs[view].getImageData(0, 0, w, h) });
-}
-
-function requestBuild() {
-    currentJobId++; pendingBuild = true;
-    if(DOM.state) { DOM.state.innerText = 'SCULPTING…'; DOM.state.classList.add('sculpting-pulse'); }
-    worker.postMessage({ type: 'build', cfg: CFG, jobId: currentJobId });
-}
-
-worker.onmessage = function(e) {
-    const msg = e.data;
-    if (msg.type === 'done') {
-        if (msg.jobId !== currentJobId) return; 
-        pendingBuild = false;
-        if(DOM.state) DOM.state.classList.remove('sculpting-pulse');
-
-        if (msg.activeCount > 0) {
-            if (!instancedMesh) {
-                const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-                const boxMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.1, flatShading: true });
-                instancedMesh = new THREE.InstancedMesh(boxGeo, boxMat, CFG.resolution ** 3);
-                scene.add(instancedMesh);
-            }
-            instancedMesh.instanceMatrix = new THREE.InstancedBufferAttribute(msg.matrices, 16);
-            instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-            instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(msg.colors, 3);
-            instancedMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-            instancedMesh.count = msg.activeCount; 
-            if(DOM.state) DOM.state.innerText = 'READY';
-        } else {
-            if(instancedMesh) instancedMesh.count = 0;
-            if(DOM.state) DOM.state.innerText = 'NO SIGNAL';
-        }
-
-        if(DOM.vox) DOM.vox.innerText = msg.activeCount.toLocaleString();
-        if(DOM.grid) DOM.grid.innerText = `${CFG.resolution}³`;
-        if(DOM.views) DOM.views.innerText = `${loaded.front + loaded.side + loaded.top}/3${loaded.top?' +T':''}`;
-        if(DOM.buildTime) DOM.buildTime.innerText = `${msg.time.toFixed(0)}ms`;
-    }
-};
-
-const debouncedBuild = debounceInput(requestBuild, 60);
-
-function generateFallbacks() {
-    const s = INTERNAL_IMAGE_SANDBOX;
-    [ctxs.front, ctxs.side, ctxs.top].forEach(ctx => {
-        ctx.canvas.width = s; ctx.canvas.height = s;
-        ctx.fillStyle = '#06060a'; ctx.fillRect(0,0,s,s);
-        // White square in the center (60% of canvas)
-        const margin = s * 0.2;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(margin, margin, s - 2 * margin, s - 2 * margin);
-    });
-}
-
-function processImageUpload(file, viewKey) {
-    if (!file.type.match(/image\//)) { showToast('⚠ INVALID FILE'); return; }
-    const reader = new FileReader();
-    reader.onload = ev => {
-        const img = new Image();
-        img.onload = () => {
-            const ctx = ctxs[viewKey];
-            ctx.drawImage(img, 0, 0, INTERNAL_IMAGE_SANDBOX, INTERNAL_IMAGE_SANDBOX);
-            if (!loaded[viewKey]) { loaded[viewKey] = true; }
-            const slot = document.getElementById(`slot-${viewKey}`);
-            if (slot) slot.classList.add('loaded');
-            updateWorkerImage(viewKey);
-            requestBuild();
-            showToast(`✓ ${viewKey.toUpperCase()} LOADED`);
-        };
-        img.src = ev.target.result;
+    // ── CFG (threshold slider default is 10 → matches slider value="10") ──
+    let CFG = {
+        resolution:   80,
+        threshold:    sliderToThreshold(10),   // FIXED: was sliderToThreshold(47)
+        blockGap:     .05,
+        sculpt:       sliderToSculpt(21),       // now correctly non-zero
+        lumaCarve:    sliderToLuma(31),
+        colorMode:    'source',
+        hollowRadius: 0,
+        span:         SPAN,
+        floorY:       WORLD_FLOOR
     };
-    reader.readAsDataURL(file);
-}
 
-function setupDragAndDrop() {
-    const cc = document.getElementById('canvas-container');
-    cc.addEventListener('dragover', e => { e.preventDefault(); cc.classList.add('dragover'); });
-    cc.addEventListener('dragleave', e => { e.preventDefault(); cc.classList.remove('dragover'); });
-    cc.addEventListener('drop', e => {
-        e.preventDefault(); cc.classList.remove('dragover');
-        if (e.dataTransfer.files[0]) processImageUpload(e.dataTransfer.files[0], 'front');
-        if (e.dataTransfer.files[1]) processImageUpload(e.dataTransfer.files[1], 'side');
-        if (e.dataTransfer.files[2]) processImageUpload(e.dataTransfer.files[2], 'top');
-    });
-    ['front','side','top'].forEach(k => {
-        const el = document.getElementById(`load-${k}`);
-        if(el) el.addEventListener('change', e => { if (e.target.files[0]) processImageUpload(e.target.files[0], k); });
-    });
-}
+    // ── GRAB (match slider defaults) ──
+    let GRAB_REACH = 9300;  
+    let GRAB_BURST = 90;   
 
-['resolution', 'sculpt', 'threshold'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('input', e => {
-        CFG[id] = parseInt(e.target.value);
-        const display = document.getElementById(`v-${id}`);
-        if(display) display.innerText = e.target.value;
-        debouncedBuild();
-    });
-});
+    // ── THREE SCENE ──
+    let scene, camera, renderer, controls;
+    let instancedMesh;
+    let walkCamera = null;
+    let walkRig = { yaw: new THREE.Object3D(), pitch: new THREE.Object3D() };
 
-const lcEl = document.getElementById('lumaCarve');
-if(lcEl) lcEl.addEventListener('input', e => {
-    CFG.lumaCarve = parseFloat(e.target.value);
-    const display = document.getElementById('v-lumaCarve');
-    if(display) display.innerText = CFG.lumaCarve.toFixed(2);
-    debouncedBuild();
-});
+    // ── WALK STATE ──
+    let walkMode      = false;
+    let velX = 0, velY = 0, velZ = 0, onGround = false;  // FIXED: velX was -1
+    let jetpackEnabled=false, jetpackFiring=false;
+    let touchJumpHeld=false, touchJumpTimer=null;
 
-const colorBtn = document.getElementById('btn-color');
-if(colorBtn) colorBtn.addEventListener('click', () => {
-    CFG.colorMode = CFG.colorMode==='thermal' ? 'source' : 'thermal';
-    const display = document.getElementById('v-color');
-    if(display) display.innerText = CFG.colorMode.toUpperCase();
-    requestBuild();
-});
+    // ── ORBIT STATE ──
+    let isIntersecting=false, mouseVelocity={x:0,y:0}, lastMousePos={x:0,y:0};
+    let frictionEnabled=false;
 
-const CAM_POS = { d: [2.8,2.2,2.8], f: [0,0,4.5], s: [4.5,0,0], t: [0,4.5,0.01] };
-function moveCam(tgt) { camera.position.set(...tgt); controls.target.set(0,0,0); controls.update(); }
-function handleKeyboard(k) {
-    if(k==='r'){ moveCam(CAM_POS.d); showToast('⌂ RESET'); }
-    if(k==='f'){ moveCam(CAM_POS.f); showToast('◈ FRONT'); }
-    if(k==='s'){ moveCam(CAM_POS.s); showToast('◈ SIDE'); }
-    if(k==='t'){ moveCam(CAM_POS.t); showToast('◈ TOP'); }
-    if(k==='a' && DOM.btnRot){ DOM.btnRot.click(); }
-    if(k===' '){ const sBtn = document.getElementById('btn-screenshot'); if(sBtn) sBtn.click(); }
-}
+    // ── INPUT STATE ──
+    const keys = {};
+    const joy  = { active:false, id:null, cx:0, cy:0, dx:0, dy:0, startTime:0, startX:0, startY:0 };
+    const look = { active:false, id:null, lastX:0, lastY:0 };
+    const screenTaps = {};
 
-const resetCamBtn = document.getElementById('btn-reset-cam');
-if(resetCamBtn) resetCamBtn.addEventListener('click', ()=>moveCam(CAM_POS.d));
+    // ── MISC ──
+    const ctxs = {};
+    const loaded = { front:false, side:false, top:false };
+    let currentJobId = 0;
+    let hudTick = 0;
+    const grappleRaycaster = new THREE.Raycaster();
 
-const screenBtn = document.getElementById('btn-screenshot');
-if(screenBtn) screenBtn.addEventListener('click', () => {
-    renderer.render(scene, camera);
-    const link = document.createElement('a');
-    link.download = `sdf-v6-${Date.now()}.png`; link.href = renderer.domElement.toDataURL('image/png'); link.click();
-    showToast('⬇ SAVED');
-});
+    // ── GRAPPLE BEAM (SVG overlay) ──
+    let grappleBeamActive = false;
+    let grappleBeamTimer  = null;
 
-function updateFrictionState() {
-    if (!DOM.btnRot) return;
-    if (frictionEnabled) { 
-        DOM.btnRot.classList.add('active-toggle'); DOM.btnRot.textContent = '⟳ BRAKES: ON'; 
-    } else { 
-        DOM.btnRot.classList.remove('active-toggle'); DOM.btnRot.textContent = '⟳ GLIDE: ON'; 
+    // ── DOM REFS ──
+    const DOM = {
+        state:     document.getElementById('s-state'),
+        vox:       document.getElementById('s-vox'),
+        grid:      document.getElementById('s-grid'),
+        views:     document.getElementById('s-views'),
+        buildTime: document.getElementById('s-build-time'),
+        modeStr:   document.getElementById('s-mode'),
+        sHollow:   document.getElementById('s-hollow'),
+        btnRot:    document.getElementById('btn-auto-rotate'),
+        btnWalk:   document.getElementById('btn-walk-toggle'),
+        btnJetpack:document.getElementById('btn-jetpack'),
+        walkHUD:   document.getElementById('walk-hud'),
+        crosshair: document.getElementById('walk-crosshair'),
+        joyZone:   document.getElementById('joy-zone'),
+        joyKnob:   document.getElementById('joy-knob'),
+        lookHint:  document.getElementById('look-hint'),
+        grappleBtn:document.getElementById('grapple-btn'),
+        jumpTouchBtn:document.getElementById('jump-touch-btn'),
+        walkTouchBtns:document.getElementById('walk-touch-btns'),
+        jumpFlash: document.getElementById('jump-flash'),
+        grabFlash: document.getElementById('grab-flash'),
+        jetFlame:  document.getElementById('jet-flame'),
+        whPos:     document.getElementById('wh-pos'),
+        whYaw:     document.getElementById('wh-yaw'),
+        whSpd:     document.getElementById('wh-spd'),
+        whudJet:   document.getElementById('whud-jet'),
+        whudGrab:  document.getElementById('whud-grab'),
+    };
+
+    // ── WORKER ──
+    const workerBlob = new Blob([document.getElementById('voxel-worker').textContent],{type:'application/javascript'});
+    const worker = new Worker(URL.createObjectURL(workerBlob));
+
+    // ── UTILS ──
+    function showToast(msg, dur=3200){
+        const c=document.getElementById('toast-container');
+        const t=document.createElement('div'); t.className='toast'; t.textContent=msg; c.appendChild(t);
+        setTimeout(()=>{ if(t.parentNode)t.parentNode.removeChild(t); }, dur);
     }
-}
+    function debounce(fn,d){ let tm; return(...a)=>{ clearTimeout(tm); tm=setTimeout(()=>fn(...a),d); }; }
+    function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+    function isTouchDevice(){ return navigator.maxTouchPoints>0; }
 
-if(DOM.btnRot) { DOM.btnRot.addEventListener('click', () => { frictionEnabled = !frictionEnabled; updateFrictionState(); }); }
+    function flashJump(){
+        DOM.jumpFlash.classList.add('pop');
+        setTimeout(()=>DOM.jumpFlash.classList.remove('pop'),110);
+    }
+    function flashGrab(){
+        DOM.grabFlash.classList.add('pop');
+        setTimeout(()=>DOM.grabFlash.classList.remove('pop'),255);
+    }
 
-const deckTab = document.getElementById('deck-tab');
-if(deckTab) deckTab.addEventListener('click', e => {
-    if (e.target.closest('.btn-row') || e.target.closest('.icon-btn')) return;
-    const uiDeck = document.getElementById('ui-deck');
-    if(uiDeck) uiDeck.classList.toggle('collapsed');
-    setTimeout(() => window.dispatchEvent(new Event('resize')), 260); 
-});
+    // ── GRAPPLE ──
+    function tryGrapple(){
+        if(!instancedMesh||instancedMesh.count===0)return;
+        grappleRaycaster.setFromCamera(new THREE.Vector2(0,0), walkCamera);
+        const hits=grappleRaycaster.intersectObject(instancedMesh);
+        if(!hits.length||hits[0].distance>GRAB_REACH)return;
 
-function animate() {
-    requestAnimationFrame(animate);
+        const toHit = hits[0].point.clone().sub(walkRig.yaw.position).normalize();
+        const forward = new THREE.Vector3();
+        walkCamera.getWorldDirection(forward);
 
-    if (isIntersecting) {
-        mouseVelocity.x *= 0.88; mouseVelocity.y *= 0.88;
-    } else if (!frictionEnabled) {
-        if (Math.abs(mouseVelocity.x) > 0.5 || Math.abs(mouseVelocity.y) > 0.5) {
-            let offset = camera.position.clone().sub(controls.target);
-            offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), -mouseVelocity.x * 0.0003);
-            let right = new THREE.Vector3(); camera.matrix.extractBasis(right, new THREE.Vector3(), new THREE.Vector3());
-            offset.applyAxisAngle(right, -mouseVelocity.y * 0.0003);
-            camera.position.copy(controls.target).add(offset);
+        // FIXED: single clean impulse — no double Z application
+        velX += toHit.x * GRAB_BURST + forward.x * 40;
+        velY += toHit.y * GRAB_BURST;
+        velZ += toHit.z * GRAB_BURST + forward.z * 40;
+
+        onGround = false;
+        flashGrab();
+        DOM.crosshair.classList.add('target');
+        setTimeout(()=>DOM.crosshair.classList.remove('target'),200);
+        DOM.whudGrab.classList.add('on');
+        setTimeout(()=>DOM.whudGrab.classList.remove('on'),400);
+    }
+
+    function updateGrappleAim(){
+        if(!walkMode||!instancedMesh||instancedMesh.count===0){ DOM.crosshair.classList.remove('target'); return; }
+        grappleRaycaster.setFromCamera(new THREE.Vector2(0,0), walkCamera);
+        const hits=grappleRaycaster.intersectObject(instancedMesh);
+        if(hits.length&&hits[0].distance<=GRAB_REACH){
+            DOM.crosshair.classList.add('target');
+        } else {
+            DOM.crosshair.classList.remove('target');
         }
     }
 
-    controls.update(); 
-    if (particleSystem) { particleSystem.rotation.y += 0.0005; particleSystem.rotation.x += 0.0005; }
-    renderer.render(scene, camera);
-}
+    // ── JETPACK ──
+    function toggleJetpack(){
+        jetpackEnabled=!jetpackEnabled;
+        DOM.btnJetpack.classList.toggle('jet-on',jetpackEnabled);
+        DOM.btnJetpack.textContent=jetpackEnabled?'j e t : o n':'j e t p a c k';
+        showToast(jetpackEnabled?'· · · j e t p a c k a r m e d · · ·':'· · · j e t p a c k o f f · · ·');
+    }
 
-init(); animate();
-console.log('%c◈ SYSTEM READY %c[MONSTER ARCHITECTURE]', 'color:#00ffcc;font-weight:bold;', 'color:#ff0055;');
+    function updateJetpackFiring(jumpHeld){
+        if(!jetpackEnabled||!walkMode){ jetpackFiring=false; DOM.jetFlame.classList.remove('on'); DOM.whudJet.classList.remove('on'); return; }
+        jetpackFiring=jumpHeld;
+        DOM.jetFlame.classList.toggle('on',jetpackFiring);
+        DOM.whudJet.classList.toggle('on',jetpackFiring);
+    }
+
+    function tryJump(){
+        if(jetpackEnabled){ velY=Math.max(velY,JUMP_FORCE*0.6); flashJump(); }
+        else if(onGround){ velY=JUMP_FORCE; onGround=false; flashJump(); }
+    }
+
+    function isJumpHeld(){ return keys['Space']||keys['KeyJ']; }
+
+    // ── SPAWN / MODE ──
+    function spawnPlayer(){
+        walkRig.yaw.position.set(0, WORLD_FLOOR+EYE_HEIGHT, -WORLD_HALF-2.0);
+        walkRig.yaw.rotation.y=0; walkRig.pitch.rotation.x=0;
+        velX=0; velZ=0; velY=0; onGround=false;
+    }
+
+    // FIXED: setWalkMode now correctly shows/hides all elements
+    // Previously walk-touch-btns used display:flex but was never set, joy-zone had display:none
+    function setWalkMode(on){
+        walkMode=on;
+        const cc=document.getElementById('canvas-container');
+        if(on){
+            spawnPlayer();
+            controls.enabled=false;
+            cc.classList.add('walk-mode');
+            document.body.classList.add('in-walk');
+            DOM.walkHUD.style.display   = 'flex';
+            DOM.crosshair.style.display = 'block';
+            DOM.joyZone.style.display   = 'block';
+            DOM.walkTouchBtns.style.display = 'flex';
+            DOM.lookHint.style.display  = 'block';
+            DOM.btnWalk.classList.add('walk-on');
+            DOM.btnWalk.textContent     = 'o r b i t';
+            if(DOM.modeStr) DOM.modeStr.innerText = 'w a n d e r';
+            showToast('· · · a p p r o a c h t h e c o l o s s u s · · ·', 4000);
+        } else {
+            controls.enabled=true;
+            if(document.pointerLockElement) document.exitPointerLock();
+            cc.classList.remove('walk-mode');
+            document.body.classList.remove('in-walk');
+            DOM.walkHUD.style.display   = 'none';
+            DOM.crosshair.style.display = 'none';
+            DOM.joyZone.style.display   = 'none';
+            DOM.walkTouchBtns.style.display = 'none';
+            DOM.lookHint.style.display  = 'none';
+            DOM.btnWalk.classList.remove('walk-on');
+            DOM.btnWalk.textContent     = 'w a n d e r';
+            if(DOM.modeStr) DOM.modeStr.innerText = 'o r b i t';
+            jetpackFiring=false;
+            DOM.jetFlame.classList.remove('on');
+            DOM.whudJet.classList.remove('on');
+            showToast('· · · o r b i t e n g a g e d · · ·');
+        }
+        onResize();
+    }
+
+    // ── WALK PHYSICS ──
+    const _fwdVec=new THREE.Vector3(), _rightVec=new THREE.Vector3(), _moveVec=new THREE.Vector3();
+
+    function updateWalk(dt){
+        let mx=joy.active?joy.dx:0, mz=joy.active?joy.dy:0;
+        if(keys['KeyW']||keys['ArrowUp'])   mz-=1;
+        if(keys['KeyS']||keys['ArrowDown']) mz+=1;
+        if(keys['KeyA']||keys['ArrowLeft']) mx-=1;
+        if(keys['KeyD']||keys['ArrowRight'])mx+=1;
+
+        const jumpHeld = isJumpHeld()||touchJumpHeld;
+        updateJetpackFiring(jumpHeld);
+
+        // vertical
+        if(jetpackEnabled){
+            if(jumpHeld){
+                velY+=( JETPACK_LIFT+GRAVITY)*dt;
+                velY=Math.min(velY,26.0);
+                onGround=false;
+                velX*=JETPACK_DRIFT; velZ*=JETPACK_DRIFT;
+            } else {
+                if(!onGround) velY+=GRAVITY*dt;
+                else velY=Math.max(0,velY);
+            }
+            if(onGround){ velX*=0.6; velZ*=0.6; }
+            else { velX*=0.99; velZ*=0.99; }
+        } else {
+            if((keys['Space']||keys['KeyJ'])&&onGround){ velY=JUMP_FORCE; onGround=false; }
+            if(!onGround) velY+=GRAVITY*dt;
+            else velY=Math.max(0,velY);
+            // ground friction vs air resistance
+            if(onGround){ velX*=0.78; velZ*=0.78; }
+            else { velX*=0.96; velZ*=0.96; }
+        }
+
+        // horizontal movement
+        _fwdVec.set(0,0,mz).applyQuaternion(walkRig.yaw.quaternion);
+        _rightVec.set(mx,0,0).applyQuaternion(walkRig.yaw.quaternion);
+        _moveVec.addVectors(_fwdVec,_rightVec);
+        _moveVec.y=0;
+        if(_moveVec.length()>1) _moveVec.normalize();
+        if(_moveVec.length()>0){
+            const accel = onGround ? 280 : 120;  // reduced air control
+            velX+=_moveVec.x*accel*dt;
+            velZ+=_moveVec.z*accel*dt;
+        }
+
+        // speed cap
+        const hSpd=Math.sqrt(velX*velX+velZ*velZ);
+        const maxSpd=jetpackEnabled?180:140;
+        if(hSpd>maxSpd){ velX=velX/hSpd*maxSpd; velZ=velZ/hSpd*maxSpd; }
+
+        const pos=walkRig.yaw.position;
+        let nx=pos.x+velX*dt, ny=pos.y+velY*dt, nz=pos.z+velZ*dt;
+        const BOUND=1920;
+        nx=clamp(nx,-BOUND,BOUND); nz=clamp(nz,-BOUND,BOUND);
+        if(ny>WORLD_HALF*2.0+EYE_HEIGHT){ ny=WORLD_HALF*2.0+EYE_HEIGHT; velY=Math.min(velY,0); }
+
+        // ── GROUND + SIDE COLLISION ──
+        let groundFound=false, highestGround=-Infinity;
+        const FEET_Y=ny-EYE_HEIGHT;
+
+        if(instancedMesh&&instancedMesh.count>0){
+            const mArr=instancedMesh.instanceMatrix.array;
+            const stepMargin=1.5, fallMargin=2.0;
+            for(let i=0;i<instancedMesh.count;i++){
+                const idx=i*16;
+                const bSize=mArr[idx];
+                const bx=mArr[idx+12], by=mArr[idx+13], bz=mArr[idx+14];
+                const half=bSize/2;
+                if(Math.abs(nx-bx)<=half&&Math.abs(nz-bz)<=half){
+                    const blockTop=by+half;
+                    if(FEET_Y<=blockTop+stepMargin&&FEET_Y>=blockTop-fallMargin){
+                        if(blockTop>highestGround){ highestGround=blockTop; groundFound=true; }
+                    }
+                }
+                const overlapX=Math.abs(nx-bx)<half+PLAYER_RADIUS;
+                const overlapZ=Math.abs(nz-bz)<half+PLAYER_RADIUS;
+                const overlapY=ny>by-half&&ny-EYE_HEIGHT<by+half;
+                if(overlapX&&overlapZ&&overlapY){
+                    const pX=(nx>bx?1:-1)*(half+PLAYER_RADIUS-Math.abs(nx-bx));
+                    const pZ=(nz>bz?1:-1)*(half+PLAYER_RADIUS-Math.abs(nz-bz));
+                    if(Math.abs(pX)<Math.abs(pZ)){ nx+=pX; velX=0; }
+                    else { nz+=pZ; velZ=0; }
+                }
+            }
+        }
+
+        if(groundFound&&!(jetpackEnabled&&jumpHeld&&velY>0)){
+            ny=highestGround+EYE_HEIGHT; if(velY<0)velY=0; onGround=true;
+        } else {
+            const FLOOR=WORLD_FLOOR+EYE_HEIGHT;
+            if(ny<FLOOR){ ny=FLOOR; velY=0; onGround=true; }
+            else onGround=false;
+        }
+
+        walkRig.yaw.position.set(nx,ny,nz);
+
+        // hud
+        hudTick++;
+        if(hudTick%8===0&&DOM.whPos){
+            DOM.whPos.textContent=`${nx.toFixed(0)},${ny.toFixed(0)},${nz.toFixed(0)}`;
+            const yDeg=(((-walkRig.yaw.rotation.y*180/Math.PI)%360+360)%360).toFixed(0);
+            DOM.whYaw.textContent=`${yDeg}°`;
+            DOM.whSpd.textContent=Math.sqrt(velX*velX+velZ*velZ).toFixed(1);
+        }
+
+        updateGrappleAim();
+    }
+
+    // ── TOUCH ──
+    function getJoyCenter(){
+        const r=DOM.joyZone.getBoundingClientRect();
+        return{x:r.left+r.width/2,y:r.top+r.height/2};
+    }
+    function overJoy(x,y){
+        const jc=getJoyCenter(),dx=x-jc.x,dy=y-jc.y;
+        return Math.sqrt(dx*dx+dy*dy)<JOY_R+28;
+    }
+    function isOverEl(el,x,y){
+        const r=el.getBoundingClientRect();
+        const cx=r.left+r.width/2,cy=r.top+r.height/2;
+        const dx=x-cx,dy=y-cy;
+        return Math.sqrt(dx*dx+dy*dy)<r.width/2+10;
+    }
+
+    function onTouchStart(e){
+        if(!walkMode)return; e.preventDefault();
+        for(const t of e.changedTouches){
+            if(overJoy(t.clientX,t.clientY)&&!joy.active){
+                const jc=getJoyCenter();
+                joy.active=true;joy.id=t.identifier;joy.cx=jc.x;joy.cy=jc.y;joy.dx=0;joy.dy=0;
+                joy.startTime=Date.now();joy.startX=t.clientX;joy.startY=t.clientY;
+                DOM.joyKnob.classList.add('active');
+            } else if(isOverEl(DOM.grappleBtn,t.clientX,t.clientY)){
+                tryGrapple();
+                DOM.grappleBtn.classList.add('firing');
+                setTimeout(()=>DOM.grappleBtn.classList.remove('firing'),150);
+            } else if(isOverEl(DOM.jumpTouchBtn,t.clientX,t.clientY)){
+                DOM.jumpTouchBtn.classList.add('active');
+                tryJump();
+                setTimeout(()=>DOM.jumpTouchBtn.classList.remove('active'),200);
+            } else if(!look.active&&t.identifier!==joy.id){
+                look.active=true;look.id=t.identifier;look.lastX=t.clientX;look.lastY=t.clientY;
+                screenTaps[t.identifier]={startTime:Date.now(),startX:t.clientX,startY:t.clientY,moved:false};
+                if(jetpackEnabled){ clearTimeout(touchJumpTimer); touchJumpTimer=setTimeout(()=>{touchJumpHeld=true;},JUMP_TAP_MS); }
+            } else {
+                screenTaps[t.identifier]={startTime:Date.now(),startX:t.clientX,startY:t.clientY,moved:false};
+            }
+        }
+    }
+
+    function onTouchMove(e){
+        if(!walkMode)return; e.preventDefault();
+        for(const t of e.changedTouches){
+            if(t.identifier===joy.id){
+                const rawDx=t.clientX-joy.cx,rawDy=t.clientY-joy.cy;
+                const dist=Math.sqrt(rawDx*rawDx+rawDy*rawDy),cap=Math.min(dist,JOY_R),ang=Math.atan2(rawDy,rawDx);
+                joy.dx=(Math.cos(ang)*cap)/JOY_R;joy.dy=(Math.sin(ang)*cap)/JOY_R;
+                DOM.joyKnob.style.transform=`translate(calc(-50% + ${joy.dx*JOY_R*0.7}px),calc(-50% + ${joy.dy*JOY_R*0.7}px))`;
+            }
+            if(t.identifier===look.id){
+                const ddx=t.clientX-look.lastX,ddy=t.clientY-look.lastY;
+                walkRig.yaw.rotation.y-=ddx*LOOK_SENS;
+                walkRig.pitch.rotation.x=clamp(walkRig.pitch.rotation.x-ddy*LOOK_SENS,-PI_2+0.02,PI_2-0.02);
+                look.lastX=t.clientX;look.lastY=t.clientY;
+            }
+            if(screenTaps[t.identifier]){
+                const tap=screenTaps[t.identifier];
+                const dx=t.clientX-tap.startX,dy=t.clientY-tap.startY;
+                if(Math.sqrt(dx*dx+dy*dy)>JUMP_TAP_DIST)tap.moved=true;
+            }
+        }
+    }
+
+    function onTouchEnd(e){
+        if(!walkMode)return; e.preventDefault();
+        for(const t of e.changedTouches){
+            if(t.identifier===joy.id){
+                const dur=Date.now()-joy.startTime,dist=Math.sqrt((t.clientX-joy.startX)**2+(t.clientY-joy.startY)**2);
+                if(dur<JUMP_TAP_MS&&dist<JUMP_TAP_DIST)tryJump();
+                joy.active=false;joy.id=null;joy.dx=0;joy.dy=0;
+                DOM.joyKnob.style.transform='translate(-50%,-50%)';
+                DOM.joyKnob.classList.remove('active');
+            }
+            if(t.identifier===look.id){
+                look.active=false;look.id=null;
+                clearTimeout(touchJumpTimer);touchJumpHeld=false;
+            }
+            if(screenTaps[t.identifier]){
+                const tap=screenTaps[t.identifier];
+                const dur=Date.now()-tap.startTime;
+                if(!tap.moved&&dur<JUMP_TAP_MS)tryJump();
+                delete screenTaps[t.identifier];
+            }
+        }
+    }
+
+    // ── WORKER COMMS ──
+    function updateWorkerImage(view){
+        const w=ctxs[view].canvas.width,h=ctxs[view].canvas.height;
+        worker.postMessage({type:'update_image',view,imgData:ctxs[view].getImageData(0,0,w,h)});
+    }
+
+    function requestBuild(){
+        currentJobId++;
+        if(DOM.state){ DOM.state.innerText='f o r m i n g . . .'; DOM.state.classList.add('forming'); }
+        worker.postMessage({type:'build',cfg:CFG,jobId:currentJobId});
+    }
+    const debouncedBuild=debounce(requestBuild,80);
+
+    worker.onmessage=function(e){
+        const msg=e.data;
+        if(msg.type==='done'){
+            if(msg.jobId!==currentJobId)return;
+            if(DOM.state) DOM.state.classList.remove('forming');
+            if(msg.activeCount>0){
+                if(!instancedMesh){
+                    const g=new THREE.BoxGeometry(1,1,1);
+                    const m=new THREE.MeshToonMaterial({roughness:0.8,flatShading:true});
+                    instancedMesh=new THREE.InstancedMesh(g,m,CFG.resolution**3);
+                    scene.add(instancedMesh);
+                }
+                instancedMesh.instanceMatrix=new THREE.InstancedBufferAttribute(msg.matrices,16);
+                instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                instancedMesh.instanceColor=new THREE.InstancedBufferAttribute(msg.colors,3);
+                instancedMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+                instancedMesh.count=msg.activeCount;
+                if(DOM.state) DOM.state.innerText='q u i e t';
+            } else {
+                if(instancedMesh) instancedMesh.count=0;
+                if(DOM.state) DOM.state.innerText='e m p t y';
+            }
+            if(DOM.vox)       DOM.vox.innerText=msg.activeCount.toLocaleString();
+            if(DOM.grid)      DOM.grid.innerText=`${CFG.resolution}³`;
+            if(DOM.views)     DOM.views.innerText=`${+loaded.front+ +loaded.side+ +loaded.top}/3`;
+            if(DOM.buildTime) DOM.buildTime.innerText=`${msg.time.toFixed(0)}ms`;
+            if(DOM.sHollow)   DOM.sHollow.innerText=CFG.hollowRadius>0?`r${CFG.hollowRadius}`:'solid';
+        }
+    };
+
+    // ── IMAGE PIPELINE ──
+    const IMG_SIZE=128;
+
+    function generateFallbacks(){
+        [ctxs.front,ctxs.side,ctxs.top].forEach(ctx=>{
+            ctx.canvas.width=IMG_SIZE;ctx.canvas.height=IMG_SIZE;
+            ctx.fillStyle='#313833';ctx.fillRect(0,0,IMG_SIZE,IMG_SIZE);
+            ctx.fillStyle='#35474A';const m=IMG_SIZE*0.25;
+            ctx.fillRect(m,m,IMG_SIZE-2*m,IMG_SIZE-2*m);
+        });
+    }
+
+    function processImageUpload(file,viewKey){
+        if(!file.type.match(/image\//)){showToast('· · · invalid · · ·');return;}
+        const reader=new FileReader();
+        reader.onload=ev=>{
+            const img=new Image();
+            img.onload=()=>{
+                ctxs[viewKey].canvas.width=IMG_SIZE; ctxs[viewKey].canvas.height=IMG_SIZE;
+                ctxs[viewKey].drawImage(img,0,0,IMG_SIZE,IMG_SIZE);
+                if(!loaded[viewKey]) loaded[viewKey]=true;
+                document.getElementById(`slot-${viewKey}`).classList.add('loaded');
+                updateWorkerImage(viewKey);
+                requestBuild();
+                showToast(`· · · ${viewKey} accepted · · ·`);
+            };
+            img.src=ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // ── INIT ──
+    function init(){
+        const cc=document.getElementById('canvas-container');
+        scene=new THREE.Scene();
+        scene.background=new THREE.Color(0x252F1C);
+        scene.fog=new THREE.Fog(0x252F1C, CAMERA_FAR*0.80, CAMERA_FAR);
+
+        camera=new THREE.PerspectiveCamera(35,cc.clientWidth/cc.clientHeight,0.05,CAMERA_FAR);
+        camera.position.set(400,250,400);
+
+        renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance',preserveDrawingBuffer:true});
+        renderer.setSize(cc.clientWidth,cc.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+        renderer.outputEncoding=THREE.sRGBEncoding;
+        renderer.shadowMap.enabled=true;
+        cc.appendChild(renderer.domElement);
+
+        controls=new THREE.OrbitControls(camera,renderer.domElement);
+        controls.enableDamping=true; controls.dampingFactor=0.05;
+        controls.screenSpacePanning=true;
+        controls.target.set(0,WORLD_HALF*0.5,0);
+
+        walkCamera=new THREE.PerspectiveCamera(65,cc.clientWidth/cc.clientHeight,0.05,CAMERA_FAR);
+        walkRig.yaw.add(walkRig.pitch); walkRig.pitch.add(walkCamera);
+        scene.add(walkRig.yaw);
+        spawnPlayer();
+
+        // Lighting — palette-matched
+        scene.add(new THREE.AmbientLight(0xA6A99C, 0.8));
+        const hemi=new THREE.HemisphereLight(0xADBCBA, 0x252F1C, 0.45);
+        scene.add(hemi);
+        const dl=new THREE.DirectionalLight(0xA09080, 0.75);
+        dl.position.set(300,400,300);
+        scene.add(dl);
+        const fill=new THREE.DirectionalLight(0x35474A, 0.25);
+        fill.position.set(-200,-300,-200);
+        scene.add(fill);
+
+        // Grid
+        const grid=new THREE.GridHelper(700,70,0x35474A,0x374334);
+        grid.position.y=WORLD_FLOOR;
+        scene.add(grid);
+
+        // Floor plane
+        const floorMat=new THREE.MeshStandardMaterial({
+            color:0x252F1C,roughness:0.99,metalness:0.0,
+            transparent:true,opacity:0.4,depthWrite:false
+        });
+        const floorMesh=new THREE.Mesh(new THREE.PlaneGeometry(2000,2000),floorMat);
+        floorMesh.rotation.x=-Math.PI/2; floorMesh.position.y=WORLD_FLOOR;
+        floorMesh.receiveShadow=true; scene.add(floorMesh);
+
+        // Particles
+        const pCount=300,pPos=new Float32Array(pCount*3);
+        for(let i=0;i<pCount;i++){
+            pPos[i*3]=(Math.random()-.5)*20;
+            pPos[i*3+1]=Math.random()*10;
+            pPos[i*3+2]=(Math.random()-.5)*20;
+        }
+        const pGeo=new THREE.BufferGeometry();
+        pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+        const particles=new THREE.Points(pGeo,new THREE.PointsMaterial({
+            color:0xADBCBA,size:0.08,transparent:true,opacity:0.015,
+            blending:THREE.AdditiveBlending,depthWrite:false
+        }));
+        scene.add(particles);
+
+        // Canvas contexts
+        ctxs.front=document.getElementById('canv-front').getContext('2d',{willReadFrequently:true});
+        ctxs.side =document.getElementById('canv-side').getContext('2d',{willReadFrequently:true});
+        ctxs.top  =document.getElementById('canv-top').getContext('2d',{willReadFrequently:true});
+        generateFallbacks();
+        updateWorkerImage('front'); updateWorkerImage('side'); updateWorkerImage('top');
+        requestBuild();
+
+        // Events
+        window.addEventListener('resize',onResize);
+        setupDragDrop();
+        setupUI();
+
+        window.addEventListener('keydown',e=>{ keys[e.code]=true; if(e.target.tagName!=='INPUT') handleKey(e.key.toLowerCase(),e); });
+        window.addEventListener('keyup',  e=>{ keys[e.code]=false; });
+
+        document.addEventListener('touchstart',onTouchStart,{passive:false});
+        document.addEventListener('touchmove', onTouchMove, {passive:false});
+        document.addEventListener('touchend',  onTouchEnd,  {passive:false});
+        document.addEventListener('touchcancel',onTouchEnd, {passive:false});
+
+        renderer.domElement.addEventListener('click',()=>{
+            if(walkMode&&!isTouchDevice()) renderer.domElement.requestPointerLock();
+        });
+        document.addEventListener('pointerlockchange',()=>{
+            if(walkMode&&document.pointerLockElement===renderer.domElement) showToast('· · · look locked · · ·');
+        });
+        document.addEventListener('mousemove',e=>{
+            if(!walkMode||document.pointerLockElement!==renderer.domElement) return;
+            walkRig.yaw.rotation.y-=e.movementX*LOOK_SENS;
+            walkRig.pitch.rotation.x=clamp(walkRig.pitch.rotation.x-e.movementY*LOOK_SENS,-PI_2+0.02,PI_2-0.02);
+        });
+
+        const cvs=renderer.domElement;
+        cvs.addEventListener('pointerdown',e=>{ if(walkMode)return; isIntersecting=true; lastMousePos.x=e.clientX; lastMousePos.y=e.clientY; mouseVelocity.x=0; mouseVelocity.y=0; });
+        window.addEventListener('pointermove',e=>{ if(!isIntersecting||walkMode)return; mouseVelocity.x=e.clientX-lastMousePos.x; mouseVelocity.y=e.clientY-lastMousePos.y; lastMousePos.x=e.clientX; lastMousePos.y=e.clientY; });
+        window.addEventListener('pointerup',()=>isIntersecting=false);
+    }
+
+    // ── DRAG/DROP ──
+    function setupDragDrop(){
+        const cc=document.getElementById('canvas-container');
+        const hint=document.getElementById('drop-hint');
+        cc.addEventListener('dragover',e=>{ e.preventDefault(); hint.style.opacity='1'; });
+        cc.addEventListener('dragleave',()=>{ hint.style.opacity='0'; });
+        cc.addEventListener('drop',e=>{
+            e.preventDefault(); hint.style.opacity='0';
+            if(e.dataTransfer.files[0]) processImageUpload(e.dataTransfer.files[0],'front');
+            if(e.dataTransfer.files[1]) processImageUpload(e.dataTransfer.files[1],'side');
+            if(e.dataTransfer.files[2]) processImageUpload(e.dataTransfer.files[2],'top');
+        });
+        ['front','side','top'].forEach(k=>{
+            const el=document.getElementById(`load-${k}`);
+            if(el) el.addEventListener('change',e=>{ if(e.target.files[0]) processImageUpload(e.target.files[0],k); });
+        });
+    }
+
+    // ── UI ──
+    function setupUI(){
+        // Init display values to match slider defaults
+        document.getElementById('v-sculpt').innerText = sliderToSculpt(21);
+        document.getElementById('v-lumaCarve').innerText = sliderToLuma(31).toFixed(2);
+        document.getElementById('v-threshold').innerText = sliderToThreshold(10);
+
+        document.getElementById('resolution').addEventListener('input',e=>{
+            CFG.resolution=parseInt(e.target.value);
+            document.getElementById('v-resolution').innerText=e.target.value;
+            debouncedBuild();
+        });
+        document.getElementById('lumaCarve').addEventListener('input',e=>{
+            const t=parseInt(e.target.value); CFG.lumaCarve=sliderToLuma(t);
+            document.getElementById('v-lumaCarve').innerText=CFG.lumaCarve.toFixed(2);
+            debouncedBuild();
+        });
+        document.getElementById('sculpt').addEventListener('input',e=>{
+            const t=parseInt(e.target.value); CFG.sculpt=sliderToSculpt(t);
+            document.getElementById('v-sculpt').innerText=CFG.sculpt;
+            debouncedBuild();
+        });
+        document.getElementById('threshold').addEventListener('input',e=>{
+            const t=parseInt(e.target.value); CFG.threshold=sliderToThreshold(t);
+            document.getElementById('v-threshold').innerText=CFG.threshold;
+            debouncedBuild();
+        });
+        document.getElementById('hollow').addEventListener('input',e=>{
+            const t=parseInt(e.target.value); CFG.hollowRadius=sliderToHollow(t);
+            document.getElementById('v-hollow').innerText=CFG.hollowRadius>0?CFG.hollowRadius:'0';
+            debouncedBuild();
+        });
+        document.getElementById('grab-reach').addEventListener('input',e=>{
+            GRAB_REACH=parseInt(e.target.value);
+            document.getElementById('v-reach').innerText=GRAB_REACH;
+        });
+        document.getElementById('grab-burst').addEventListener('input',e=>{
+            GRAB_BURST=parseInt(e.target.value);
+            document.getElementById('v-burst').innerText=GRAB_BURST;
+        });
+        document.getElementById('btn-color').addEventListener('click',()=>{
+            CFG.colorMode=CFG.colorMode==='thermal'?'source':'thermal';
+            document.getElementById('v-color').innerText=CFG.colorMode;
+            requestBuild();
+        });
+
+        DOM.btnRot.addEventListener('click',()=>{
+            frictionEnabled=!frictionEnabled;
+            DOM.btnRot.classList.toggle('active',frictionEnabled);
+            DOM.btnRot.textContent=frictionEnabled?'s t a t i c':'d r i f t';
+        });
+
+        // FIXED: walk toggle now properly calls setWalkMode
+        DOM.btnWalk.addEventListener('click',()=>{ setWalkMode(!walkMode); });
+
+        DOM.btnJetpack.addEventListener('click',()=>toggleJetpack());
+
+        document.getElementById('btn-reset-cam').addEventListener('click',()=>{
+            if(walkMode){ spawnPlayer(); showToast('· · · r e s e t · · ·'); }
+            else{ camera.position.set(400,250,400); controls.target.set(0,WORLD_HALF*0.5,0); controls.update(); showToast('· · · a n c h o r e d · · ·'); }
+        });
+
+        document.getElementById('btn-screenshot').addEventListener('click',()=>{
+            renderer.render(scene,walkMode?walkCamera:camera);
+            const link=document.createElement('a');
+            link.download=`pandra-${Date.now()}.png`;
+            link.href=renderer.domElement.toDataURL('image/png');
+            link.click();
+            showToast('· · · r e m e m b e r e d · · ·');
+        });
+
+        document.getElementById('deck-tab').addEventListener('click',e=>{
+            if(e.target.closest('.icon-btn')) return;
+            if(walkMode) return;
+            document.getElementById('ui-deck').classList.toggle('collapsed');
+            setTimeout(()=>window.dispatchEvent(new Event('resize')),250);
+        });
+    }
+
+    function handleKey(k,e){
+        if(k==='p'||k==='enter') setWalkMode(!walkMode);
+        if(k==='j'&&!e.repeat){
+            if(walkMode){ if(jetpackEnabled) tryJump(); }
+            else toggleJetpack();
+        }
+        if(k==='g'&&!walkMode) DOM.btnRot.click();
+        if(k==='r'){
+            if(walkMode) spawnPlayer();
+            else{ camera.position.set(400,250,400); controls.target.set(0,WORLD_HALF*0.5,0); controls.update(); }
+        }
+        if(k===' '&&!walkMode) document.getElementById('btn-screenshot').click();
+        if(k==='f'&&walkMode) tryGrapple();
+    }
+
+    function onResize(){
+        const cc=document.getElementById('canvas-container'),w=cc.clientWidth,h=cc.clientHeight;
+        camera.aspect=w/h; camera.updateProjectionMatrix();
+        walkCamera.aspect=w/h; walkCamera.updateProjectionMatrix();
+        renderer.setSize(w,h);
+    }
+
+    // ── ANIMATE ──
+    const clock=new THREE.Clock();
+    function animate(){
+        requestAnimationFrame(animate);
+        const dt=Math.min(clock.getDelta(),0.05);
+        if(walkMode){
+            updateWalk(dt);
+            renderer.render(scene,walkCamera);
+        } else {
+            if(isIntersecting){ mouseVelocity.x*=0.92; mouseVelocity.y*=0.92; }
+            else if(!frictionEnabled&&(Math.abs(mouseVelocity.x)>0.5||Math.abs(mouseVelocity.y)>0.5)){
+                let offset=camera.position.clone().sub(controls.target);
+                offset.applyAxisAngle(new THREE.Vector3(0,1,0),-mouseVelocity.x*0.001);
+                const right=new THREE.Vector3(); camera.matrix.extractBasis(right,new THREE.Vector3(),new THREE.Vector3());
+                offset.applyAxisAngle(right,-mouseVelocity.y*0.001);
+                camera.position.copy(controls.target).add(offset);
+            }
+            controls.update();
+            renderer.render(scene,camera);
+        }
+    }
+
+    init();
+    animate();
 </script>
 </body>
 </html>
